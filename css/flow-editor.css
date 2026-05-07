@@ -42,14 +42,14 @@
 
 .flow-track {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, 350px); /* カード幅に合わせる */
   column-gap: var(--flow-branch-gap);
   row-gap: 20px;
   position: relative;
   padding: 40px 20px;
   justify-items: stretch;
-  width: 100%;
-  max-width: 800px;
+  width: fit-content; /* 中身の幅に合わせる */
+  min-width: 100%; /* 最低でもコンテナの幅いっぱいに広げる */
   margin: 0 auto;
   z-index: 1; /* 接続線を背面(-1)に配置するためのスタッキングコンテキストの親 */
 }
@@ -70,6 +70,7 @@
   border-radius: 14px;
   background: linear-gradient(180deg, #fafdff 0%, #f2f7fc 100%);
   padding: 14px;
+  overflow-x: auto; /* 横スクロールを許可 */
 }
 
 
@@ -471,10 +472,9 @@
 .flow-check-block {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, 350px);
   column-gap: var(--flow-branch-gap);
-  width: 100%;
-  width: 100%;
+  width: fit-content;
 }
 
 .flow-check-card {
@@ -498,12 +498,12 @@
   position: relative;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, 350px);
   column-gap: var(--flow-branch-gap);
   row-gap: 0;
   padding-top: var(--flow-branch-drop);
   margin-top: 0;
-  width: 100%;
+  width: fit-content;
   box-sizing: border-box;
   min-height: 0;
 }
