@@ -130,27 +130,16 @@ local function createSequence(config)
           logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)
           branch = bStep.okBranch or {}
           waitBefore = bStep.okWaitBefore or 0.5
-          waitAfter = bStep.okWaitAfter or 0.5
         else
           logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)
           branch = bStep.ngBranch or {}
           waitBefore = bStep.ngWaitBefore or 0.5
-          waitAfter = bStep.ngWaitAfter or 0.5
         end
         logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))
         config._timer = hs.timer.doAfter(waitBefore, function()
           config._timer = nil
           executeBranch(branch, function(jumpIdx)
-            logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_END", string.format("%.2fs", waitAfter))
-            config._timer = hs.timer.doAfter(waitAfter, function()
-              config._timer = nil
-              -- CHECKステップ全体の待機
-              local waitTotalAfter = bStep.waitAfter or 0.25
-              config._timer = hs.timer.doAfter(waitTotalAfter, function()
-                config._timer = nil
-                onDone(jumpIdx)
-              end)
-            end)
+            onDone(jumpIdx)
           end)
         end)
       end, {"run", "GetScreenText"})
@@ -314,26 +303,20 @@ local function createSequence(config)
             logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)
             branch = s.okBranch or {}
             waitBefore = s.okWaitBefore or 0.5
-            waitAfter = s.okWaitAfter or 0.5
           else
             logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)
             branch = s.ngBranch or {}
             waitBefore = s.ngWaitBefore or 0.5
-            waitAfter = s.ngWaitAfter or 0.5
           end
           logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))
           config._timer = hs.timer.doAfter(waitBefore, function()
             config._timer = nil
             executeBranch(branch, function(jumpIdx)
-              logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_END", string.format("%.2fs", waitAfter))
-              config._timer = hs.timer.doAfter(waitAfter, function()
-                config._timer = nil
-                if jumpIdx then
-                  runStep(jumpIdx)
-                else
-                  runStep(index + 1)
-                end
-              end)
+              if jumpIdx then
+                runStep(jumpIdx)
+              else
+                runStep(index + 1)
+              end
             end)
           end)
         end, {"run", "GetScreenText"})
@@ -419,9 +402,7 @@ local allSequences = {}
           sLua += `      text = "${luaString(s.text)}",\n`;
           sLua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
           sLua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
-          sLua += `      okWaitAfter = ${s.okWaitAfter ?? 0.5},\n`;
           sLua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
-          sLua += `      ngWaitAfter = ${s.ngWaitAfter ?? 0.5},\n`;
           sLua += `      okBranch = {\n${walkSteps(s.okBranch || [])}      },\n`;
           sLua += `      ngBranch = {\n${walkSteps(s.ngBranch || [])}      },\n`;
         } else if (s.kind === "jump") {

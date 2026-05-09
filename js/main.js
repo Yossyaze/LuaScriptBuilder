@@ -376,7 +376,7 @@ function updateStepField(stepId, field, value) {
   saveHistory();
   const step = findStepById(stepId);
   if (!step) return;
-  if (["waitAfter", "x", "y", "settleBefore", "okWaitBefore", "ngWaitBefore", "okWaitAfter", "ngWaitAfter"].includes(field)) {
+  if (["waitAfter", "x", "y", "settleBefore", "okWaitBefore", "ngWaitBefore"].includes(field)) {
     step[field] = Number(value);
   } else if (field === "targetId") {
     step[field] = value ? Number(value) : null;

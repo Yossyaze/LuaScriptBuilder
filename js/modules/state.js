@@ -138,8 +138,6 @@ export function normalizeStep(step) {
     s.useRegex = !!step.useRegex;
     s.okWaitBefore = normalizeWaitAfter(step.okWaitBefore, 0.5);
     s.ngWaitBefore = normalizeWaitAfter(step.ngWaitBefore, 0.5);
-    s.okWaitAfter = normalizeWaitAfter(step.okWaitAfter, 0.5);
-    s.ngWaitAfter = normalizeWaitAfter(step.ngWaitAfter, 0.5);
     s.okBranch = Array.isArray(step.okBranch)
       ? step.okBranch.map((bs) => normalizeStep(bs))
       : [];

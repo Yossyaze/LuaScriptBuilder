@@ -322,11 +322,7 @@ function renderFlowStepsRecursive(
         renderFlowStepsRecursive(
           step.okBranch || [],
           false,
-          {
-            value: step.okWaitAfter,
-            parentStepId: step.id,
-            field: "okWaitAfter",
-          },
+          null,
           currentIdx,
         );
       currentIdx = nextIdxAfterOk;
@@ -335,11 +331,7 @@ function renderFlowStepsRecursive(
         renderFlowStepsRecursive(
           step.ngBranch || [],
           false,
-          {
-            value: step.ngWaitAfter,
-            parentStepId: step.id,
-            field: "ngWaitAfter",
-          },
+          null,
           currentIdx,
         );
       currentIdx = nextIdxAfterNg;
@@ -453,7 +445,9 @@ function renderFlowStepsRecursive(
           </div>
         `);
       }
-    } else if (step.kind !== "check") {
+    }
+
+    if (!isStopStep && (hasNext || !isTopLevel) && step.kind !== "check") {
       const waitSeconds = step.waitAfter ?? defaultWaitSecondsForIndex(index);
       nodes.push(`
         <div class="flow-connector" data-insert-after="${step.id}">
@@ -467,18 +461,7 @@ function renderFlowStepsRecursive(
       `);
     }
 
-    if (branchWaitInfo && !hasNext && !isStopStep) {
-      nodes.push(`
-        <div class="flow-connector is-branch">
-          <div class="flow-connector-pill">
-            <span class="flow-connector-dot"></span>
-            待機
-            <input data-field="${branchWaitInfo.field}" data-step-id="${branchWaitInfo.parentStepId}" type="number" min="0" step="0.05" value="${(branchWaitInfo.value ?? 0.5).toFixed(2)}" />
-            s
-          </div>
-        </div>
-      `);
-    }
+    // branchWaitInfo (終了時待機用) は廃止。ステップ自身の waitAfter に一本化。
   });
 
   return { html: nodes.join(""), nextIdx: currentIdx };
