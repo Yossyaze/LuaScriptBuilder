@@ -81,9 +81,10 @@ local function createSequence(config)
 
   -- ブランチ内のステップを逐次実行するヘルパー
   local executeBranch
-  local function executeSingleStep(bStep, onDone)
+  local function executeSingleStep(bStep, bIndex, onDone)
     if not running then return end
-    logStep(config.enableTimelineLog, cycleCount, "BRANCH_STEP", string.format("type=%s label=%s", bStep.type, bStep.label))
+    local stepLabel = string.format("STEP=%s BRANCH index=%d", bStep.displayNum or "?", bIndex)
+    logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", bStep.type, bStep.label))
     showAlert(config, string.format("[%s] Step %d: %s", config.name, bStep.displayNum or 0, bStep.label))
     if bStep.type == "stop" then
       running = false
@@ -194,7 +195,7 @@ local function createSequence(config)
         onAllDone(nil)
         return
       end
-      executeSingleStep(branchSteps[bi], function(jumpIdx)
+      executeSingleStep(branchSteps[bi], bi, function(jumpIdx)
         if jumpIdx then
           -- ブランチ内のJUMPがメインフローへのジャンプを指示
           onAllDone(jumpIdx)
@@ -229,7 +230,8 @@ local function createSequence(config)
       end
 
       local s = config.steps[index]
-      logStep(config.enableTimelineLog, cycleCount, "STEP_" .. index, string.format("type=%s label=%s", s.type, s.label))
+      local stepLabel = string.format("STEP=%s index=%d", s.displayNum or "?", index)
+      logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", s.type, s.label))
       showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or index, s.label))
 
       if s.type == "move" then
