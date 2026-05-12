@@ -54,7 +54,6 @@ local function createSequence(config)
   local cycleCount = 0
 
   local stepIdToIndex = {}
-  local labelToIndex = {}
   for i, s in ipairs(config.steps) do
     stepIdToIndex[s.id] = i
   end
@@ -67,9 +66,8 @@ local function createSequence(config)
     if f then
       f:write(text)
       f:close()
-      local qPattern = "'" .. pattern:gsub("'", "'\\''") .. "'"
-      local qTmp = "'" .. tmp:gsub("'", "'\\''") .. "'"
-      -- -oE でマッチした箇所を抽出（-qは外す）
+      local qPattern = "'" .. pattern:gsub("'", "'\\\\''") .. "'"
+      local qTmp = "'" .. tmp:gsub("'", "'\\\\''") .. "'"
       local output, status = hs.execute(string.format("/usr/bin/grep -oE %s %s", qPattern, qTmp))
       os.remove(tmp)
       if status then
@@ -79,44 +77,63 @@ local function createSequence(config)
     return false, nil
   end
 
-  -- ブランチ内のステップを逐次実行するヘルパー
-  local executeBranch
-  local function executeSingleStep(bStep, bIndex, onDone)
+  local function runStep(index)
     if not running then return end
-    local stepLabel = string.format("STEP=%s BRANCH index=%d", bStep.displayNum or "?", bIndex)
-    logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", bStep.type, bStep.label))
-    showAlert(config, string.format("[%s] Step %d: %s", config.name, bStep.displayNum or 0, bStep.label))
-    if bStep.type == "stop" then
-      running = false
-      hs.alert.show(string.format("[%s] 【停止】ブランチ内STOP", config.name), 5)
+    
+    if not index or index <= 0 or index > #config.steps then
+      logStep(config.enableTimelineLog, cycleCount, "CYCLE_END", "completed")
+      if config.enableLoop then
+        -- タイマーを介してループ
+        config._timer = hs.timer.doAfter(0.01, function()
+          config._timer = nil
+          if running then
+            cycleCount = cycleCount + 1
+            logStep(config.enableTimelineLog, cycleCount, "CYCLE_BEGIN", "started (" .. config.name .. ")")
+            runStep(1)
+          end
+        end)
+      else
+        running = false
+        hs.alert.show(string.format("[%s] 【完了】全ステップ終了", config.name), 2)
+      end
       return
-    elseif bStep.type == "jump" then
+    end
+
+    local s = config.steps[index]
+    local stepLabel = string.format("STEP=%s index=%d", s.displayNum or "?", index)
+    logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", s.type, s.label))
+    showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or 0, s.label))
+
+    if s.type == "stop" then
+      running = false
+      hs.alert.show(string.format("[%s] 【停止】STOPステップ", config.name), 5)
+      return
+    elseif s.type == "jump" then
       local nextIdx = nil
-      if bStep.targetId then nextIdx = stepIdToIndex[bStep.targetId] end
-      local wait = bStep.waitAfter or 0.25
+      if s.targetId then nextIdx = stepIdToIndex[s.targetId] end
+      local wait = s.waitAfter or 0.25
       config._timer = hs.timer.doAfter(wait, function()
         config._timer = nil
         if not running then return end
         if nextIdx then
-          logStep(config.enableTimelineLog, cycleCount, "BRANCH_JUMP", "to index=" .. nextIdx)
-          -- ブランチを中断してメインフローの指定位置へ
-          onDone(nextIdx)
+          logStep(config.enableTimelineLog, cycleCount, "JUMP", "to index=" .. nextIdx)
+          runStep(nextIdx)
         else
-          onDone(nil)
+          runStep(s.nextIndex)
         end
       end)
       return
-    elseif bStep.type == "check" then
+    elseif s.type == "check" then
       local task = hs.task.new("/usr/bin/shortcuts", function(exitCode, stdOut, stdErr)
         if not running then return end
 
         local matched = false
         local matchedText = nil
         if exitCode == 0 and stdOut then
-          if bStep.useRegex then
-            matched, matchedText = checkRegexMatch(stdOut, bStep.text)
+          if s.useRegex then
+            matched, matchedText = checkRegexMatch(stdOut, s.text)
           else
-            local start, finish = string.find(stdOut, bStep.text, 1, true)
+            local start, finish = string.find(stdOut, s.text, 1, true)
             if start then
               matched = true
               matchedText = string.sub(stdOut, start, finish)
@@ -125,223 +142,78 @@ local function createSequence(config)
         end
 
         local cleanOut = (stdOut or ""):gsub("\\n", " "):sub(1, 200)
-        local logDetail = string.format("pattern=%s | screen=%s", bStep.text, cleanOut)
+        local logDetail = string.format("pattern=%s | screen=%s", s.text, cleanOut)
+        local waitBefore = 0.5
+        local nextIdx = nil
+
         if matched then
           logDetail = logDetail .. string.format(" | matched=%s", matchedText or "")
           logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)
-          branch = bStep.okBranch or {}
-          waitBefore = bStep.okWaitBefore or 0.5
+          waitBefore = s.okWaitBefore or 0.5
+          nextIdx = s.okIndex
         else
           logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)
-          branch = bStep.ngBranch or {}
-          waitBefore = bStep.ngWaitBefore or 0.5
+          waitBefore = s.ngWaitBefore or 0.5
+          nextIdx = s.ngIndex
         end
+        
         logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))
         config._timer = hs.timer.doAfter(waitBefore, function()
           config._timer = nil
-          executeBranch(branch, function(jumpIdx)
-            onDone(jumpIdx)
-          end)
+          if not running then return end
+          runStep(nextIdx)
         end)
       end, {"run", "GetScreenText"})
       task:start()
       return
-    elseif bStep.type == "move" then
-      hs.eventtap.keyStroke(bStep.mods or {}, bStep.key, 0)
-    elseif bStep.type == "click" then
-      local app = hs.application.find(bStep.appName)
-      if not app then hs.application.launchOrFocus(bStep.appName) end
-      -- クリックは簡易実装（ブランチ内）
-      config._timer = hs.timer.doAfter(bStep.settleBefore or 0.5, function()
+    elseif s.type == "move" then
+      hs.eventtap.keyStroke(s.mods or {}, s.key, 0)
+    elseif s.type == "click" then
+      local app = hs.application.find(s.appName)
+      if not app then hs.application.launchOrFocus(s.appName) end
+      config._timer = hs.timer.doAfter(s.settleBefore or 0.5, function()
         if not running then return end
-        local ca = hs.application.find(bStep.appName)
+        local ca = hs.application.find(s.appName)
         if ca then
           ca:activate()
           local win = ca:mainWindow()
           if win then
             local f = win:frame()
             local orig = hs.mouse.absolutePosition()
-            hs.eventtap.leftClick({x = f.x + bStep.x, y = f.y + bStep.y})
+            hs.eventtap.leftClick({x = f.x + s.x, y = f.y + s.y})
             hs.timer.usleep(10000)
             hs.mouse.absolutePosition(orig)
           end
         end
-        local wait = bStep.waitAfter or 0.25
-        config._timer = hs.timer.doAfter(wait, function() config._timer = nil; onDone(nil) end)
-      end)
-      return
-    elseif bStep.type == "focus" then
-      hs.application.launchOrFocus(bStep.appName)
-    else
-      hs.eventtap.keyStroke({}, bStep.key or "space", 0)
-    end
-    -- 待機後に次のステップへ
-    local wait = bStep.waitAfter or 0.25
-    config._timer = hs.timer.doAfter(wait, function()
-      config._timer = nil
-      if not running then return end
-      onDone(nil)
-    end)
-  end
-
-  executeBranch = function(branchSteps, onAllDone)
-    if #branchSteps == 0 then
-      onAllDone(nil)
-      return
-    end
-    local function runNext(bi)
-      if not running then return end
-      if bi > #branchSteps then
-        onAllDone(nil)
-        return
-      end
-      executeSingleStep(branchSteps[bi], bi, function(jumpIdx)
-        if jumpIdx then
-          -- ブランチ内のJUMPがメインフローへのジャンプを指示
-          onAllDone(jumpIdx)
-        else
-          runNext(bi + 1)
-        end
-      end)
-    end
-    runNext(1)
-  end
-
-  local function runCycle()
-    if not running then
-      logStep(config.enableTimelineLog, cycleCount, "STOP_DETECTED", "cycle entry")
-      return
-    end
-
-    cycleCount = cycleCount + 1
-    logStep(config.enableTimelineLog, cycleCount, "CYCLE_BEGIN", "started (" .. config.name .. ")")
-
-    local function runStep(index)
-      if not running then return end
-      if index > #config.steps then
-        logStep(config.enableTimelineLog, cycleCount, "CYCLE_END", "completed")
-        if config.enableLoop then
-          runCycle()
-        else
-          running = false
-          hs.alert.show(string.format("[%s] 【完了】全ステップ終了", config.name), 2)
-        end
-        return
-      end
-
-      local s = config.steps[index]
-      local stepLabel = string.format("STEP=%s index=%d", s.displayNum or "?", index)
-      logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", s.type, s.label))
-      showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or index, s.label))
-
-      if s.type == "move" then
-        hs.eventtap.keyStroke(s.mods or {}, s.key, 0)
-      elseif s.type == "key" then
-        hs.eventtap.keyStroke({}, s.key, 0)
-      elseif s.type == "click" then
-        local app = hs.application.find(s.appName)
-        if not app then hs.application.launchOrFocus(s.appName) end
-        config._timer = hs.timer.doAfter(s.settleBefore or 0.5, function()
-          if not running then return end
-          local ca = hs.application.find(s.appName)
-          if ca then
-            ca:activate()
-            local win = ca:mainWindow()
-            if win then
-              local f = win:frame()
-              local orig = hs.mouse.absolutePosition()
-              hs.eventtap.leftClick({x = f.x + s.x, y = f.y + s.y})
-              hs.timer.usleep(10000)
-              hs.mouse.absolutePosition(orig)
-            end
-          end
-          local wait = s.waitAfter or 0.25
-          config._timer = hs.timer.doAfter(wait, function() config._timer = nil; runStep(index + 1) end)
-        end)
-        return
-      elseif s.type == "focus" then
-        hs.application.launchOrFocus(s.appName)
-      elseif s.type == "stop" then
-        running = false
-        hs.alert.show(string.format("[%s] 【停止】ステップ内STOP", config.name), 5)
-        return
-      elseif s.type == "jump" then
-        local nextIdx = nil
-        if s.targetId then nextIdx = stepIdToIndex[s.targetId] end
         local wait = s.waitAfter or 0.25
         config._timer = hs.timer.doAfter(wait, function()
           config._timer = nil
           if not running then return end
-          if nextIdx then
-            logStep(config.enableTimelineLog, cycleCount, "JUMP", "to index=" .. nextIdx)
-            runStep(nextIdx)
-          else
-            runStep(index + 1)
-          end
+          runStep(s.nextIndex)
         end)
-        return
-      elseif s.type == "check" then
-        local task = hs.task.new("/usr/bin/shortcuts", function(exitCode, stdOut, stdErr)
-          if not running then return end
-
-          local matched = false
-          local matchedText = nil
-          if exitCode == 0 and stdOut then
-            if s.useRegex then
-              matched, matchedText = checkRegexMatch(stdOut, s.text)
-            else
-              local start, finish = string.find(stdOut, s.text, 1, true)
-              if start then
-                matched = true
-                matchedText = string.sub(stdOut, start, finish)
-              end
-            end
-          end
-
-          local cleanOut = (stdOut or ""):gsub("\\n", " "):sub(1, 200)
-          local logDetail = string.format("pattern=%s | screen=%s", s.text, cleanOut)
-          if matched then
-            logDetail = logDetail .. string.format(" | matched=%s", matchedText or "")
-            logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)
-            branch = s.okBranch or {}
-            waitBefore = s.okWaitBefore or 0.5
-          else
-            logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)
-            branch = s.ngBranch or {}
-            waitBefore = s.ngWaitBefore or 0.5
-          end
-          logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))
-          config._timer = hs.timer.doAfter(waitBefore, function()
-            config._timer = nil
-            executeBranch(branch, function(jumpIdx)
-              if jumpIdx then
-                runStep(jumpIdx)
-              else
-                runStep(index + 1)
-              end
-            end)
-          end)
-        end, {"run", "GetScreenText"})
-        task:start()
-        return
-      end
-
-      local wait = s.waitAfter or 0.25
-      config._timer = hs.timer.doAfter(wait, function()
-        config._timer = nil
-        runStep(index + 1)
       end)
+      return
+    elseif s.type == "focus" then
+      hs.application.launchOrFocus(s.appName)
+    else
+      hs.eventtap.keyStroke({}, s.key or "space", 0)
     end
 
-    runStep(1)
+    local wait = s.waitAfter or 0.25
+    config._timer = hs.timer.doAfter(wait, function()
+      config._timer = nil
+      if not running then return end
+      runStep(s.nextIndex)
+    end)
   end
 
   local function start()
     if running then return end
     running = true
-    cycleCount = 0
+    cycleCount = 1
     hs.alert.show(string.format("[%s] 【開始】", config.name), 2)
-    runCycle()
+    logStep(config.enableTimelineLog, cycleCount, "CYCLE_BEGIN", "started (" .. config.name .. ")")
+    runStep(1)
   end
 
   local function stop()
@@ -374,48 +246,95 @@ local allSequences = {}
     lua += `  enableLoop = ${p.config.enableLoop || "true"},\n`;
     lua += `  steps = {\n`;
     
-    let currentDisplayNum = 1;
-
-    const walkSteps = (steps) => {
-      let sLua = "";
+    // UI側の表示順序と完全に一致させるために、ui.js と同じロジックでフラット化
+    const getAllStepsFlatLocal = (steps) => {
+      let res = [];
       steps.forEach((s) => {
-        const displayNum = currentDisplayNum++;
-        sLua += `    {\n`;
-        sLua += `      displayNum = ${displayNum},\n`;
-        sLua += `      id = ${s.id},\n`;
-        sLua += `      type = "${s.kind}",\n`;
-        sLua += `      label = "${luaString(s.title)}",\n`;
-        sLua += `      waitAfter = ${s.waitAfter ?? 0.25},\n`;
-        if (s.kind === "move") {
-          const hk = state.globalSettings[s.moveHotkey] || hotkeys[s.moveHotkey] || { key: "a", mods: ["ctrl", "shift"] };
-
-          sLua += `      key = "${luaString(hk.key)}",\n`;
-          sLua += `      mods = ${modsToLua(hk.mods)},\n`;
-        } else if (s.kind === "key") {
-          sLua += `      key = "${luaString(s.key)}",\n`;
-        } else if (s.kind === "click") {
-          sLua += `      appName = "${luaString(s.appName)}",\n`;
-          sLua += `      x = ${s.x},\n`;
-          sLua += `      y = ${s.y},\n`;
-          sLua += `      settleBefore = ${s.settleBefore},\n`;
-        } else if (s.kind === "focus") {
-          sLua += `      appName = "${luaString(s.appName)}",\n`;
-        } else if (s.kind === "check") {
-          sLua += `      text = "${luaString(s.text)}",\n`;
-          sLua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
-          sLua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
-          sLua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
-          sLua += `      okBranch = {\n${walkSteps(s.okBranch || [])}      },\n`;
-          sLua += `      ngBranch = {\n${walkSteps(s.ngBranch || [])}      },\n`;
-        } else if (s.kind === "jump") {
-          sLua += `      targetId = ${s.targetId || "nil"},\n`;
+        res.push(s);
+        if (s.kind === "check") {
+          res = res.concat(getAllStepsFlatLocal(s.okBranch || []));
+          res = res.concat(getAllStepsFlatLocal(s.ngBranch || []));
         }
-        sLua += `    },\n`;
       });
-      return sLua;
+      return res;
     };
 
-    lua += walkSteps(p.flowSteps);
+    const allSteps = getAllStepsFlatLocal(p.flowSteps);
+    const flatSteps = allSteps.map((s, i) => ({
+      ...s,
+      flatIndex: i + 1, // 1-based index for Lua
+      displayNum: i + 1
+    }));
+
+    /**
+     * 指定されたステップの「次」のステップのインデックスを特定する
+     */
+    const findNextIndex = (step, currentArray, parentAfterIndex) => {
+      const idx = currentArray.indexOf(step);
+      if (idx < currentArray.length - 1) {
+        // 次の兄弟ステップがある場合
+        return allSteps.indexOf(currentArray[idx + 1]) + 1;
+      }
+      // 兄弟がいない場合は親の「次」へ戻る
+      return parentAfterIndex;
+    };
+
+    /**
+     * 各ステップの okIndex, ngIndex, nextIndex を解決する
+     */
+    const resolveIndices = (steps, afterIndex) => {
+      steps.forEach((s) => {
+        const flatS = flatSteps[allSteps.indexOf(s)];
+        const nextIdx = findNextIndex(s, steps, afterIndex);
+        flatS.luaNextIndex = nextIdx;
+
+        if (s.kind === "check") {
+          flatS.luaOkIndex = resolveIndices(s.okBranch || [], nextIdx);
+          flatS.luaNgIndex = resolveIndices(s.ngBranch || [], nextIdx);
+        }
+      });
+      return steps.length > 0 ? (allSteps.indexOf(steps[0]) + 1) : afterIndex;
+    };
+
+    // インデックスの解決を実行
+    resolveIndices(p.flowSteps, null);
+
+    // Lua 形式に変換して出力
+    flatSteps.forEach((s) => {
+      lua += `    {\n`;
+      lua += `      displayNum = ${s.displayNum},\n`;
+      lua += `      id = ${s.id},\n`;
+      lua += `      type = "${s.kind}",\n`;
+      lua += `      label = "${luaString(s.title)}",\n`;
+      lua += `      waitAfter = ${s.waitAfter ?? 0.25},\n`;
+      lua += `      nextIndex = ${s.luaNextIndex || "nil"},\n`;
+
+      if (s.kind === "move") {
+        const hk = state.globalSettings[s.moveHotkey] || hotkeys[s.moveHotkey] || { key: "a", mods: ["ctrl", "shift"] };
+        lua += `      key = "${luaString(hk.key)}",\n`;
+        lua += `      mods = ${modsToLua(hk.mods)},\n`;
+      } else if (s.kind === "key") {
+        lua += `      key = "${luaString(s.key)}",\n`;
+      } else if (s.kind === "click") {
+        lua += `      appName = "${luaString(s.appName)}",\n`;
+        lua += `      x = ${s.x},\n`;
+        lua += `      y = ${s.y},\n`;
+        lua += `      settleBefore = ${s.settleBefore},\n`;
+      } else if (s.kind === "focus") {
+        lua += `      appName = "${luaString(s.appName)}",\n`;
+      } else if (s.kind === "check") {
+        lua += `      text = "${luaString(s.text)}",\n`;
+        lua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
+        lua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
+        lua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
+        lua += `      okIndex = ${s.luaOkIndex || "nil"},\n`;
+        lua += `      ngIndex = ${s.luaNgIndex || "nil"},\n`;
+      } else if (s.kind === "jump") {
+        lua += `      targetId = ${s.targetId || "nil"},\n`;
+      }
+      lua += `    },\n`;
+    });
+
     lua += `  }\n}\n`;
     lua += `local seq_${p.id.replace(/-/g, "_")} = createSequence(config_${p.id.replace(/-/g, "_")})\n`;
     lua += `table.insert(allSequences, seq_${p.id.replace(/-/g, "_")})\n`;
