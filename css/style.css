@@ -622,3 +622,55 @@
 
 
     
+
+      /* Preset Dropdown Styles */
+      .preset-dropdown-container {
+        position: relative;
+        display: inline-block;
+      }
+
+      .preset-btn {
+        padding: 4px 8px !important;
+        font-size: 0.8rem !important;
+        border-radius: 6px !important;
+        color: #f59e0b !important; /* Gold color */
+        border-color: #fde68a !important;
+        background: #fffbeb !important;
+      }
+
+      .preset-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 1000;
+        background: white;
+        border: 1px solid #d7e0ea;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        min-width: 180px;
+        margin-top: 4px;
+        overflow: hidden;
+      }
+
+      .preset-menu.hidden {
+        display: none;
+      }
+
+      .preset-item {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.15s;
+        color: #334155;
+        white-space: nowrap;
+        text-align: left;
+      }
+
+      .preset-item:hover {
+        background: #f1f5f9;
+        color: var(--accent);
+      }
+
+      .preset-item:not(:last-child) {
+        border-bottom: 1px solid #f1f5f9;
+      }

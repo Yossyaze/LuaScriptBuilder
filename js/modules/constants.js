@@ -25,5 +25,12 @@ export const hotkeyDisplayIds = {
   stopAll: "stopAllHotkeyDisplay",
 };
 
+export const APP_PRESETS = [
+  { name: "QuickTime Player", id: "com.apple.QuickTimePlayerX" },
+  { name: "KeyPad", id: "com.atlogic.KeyPad" },
+  { name: "Monst EX Master", id: "mnst_ex_master" },
+  { name: "iPhone Mirroring", id: "com.apple.ScreenContinuity" }, // カスタムアプリ用
+];
+
 export const NEW_STORAGE_KEY = "lua_builder_projects_v1";
 export const OLD_STORAGE_KEY = "lua_builder_settings_v1";

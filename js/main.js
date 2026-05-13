@@ -149,6 +149,7 @@ window.handleAppSelect = async function(event, stepId) {
   }
 
   let appName = "";
+  let bundleId = "";
   if (infoPlistFile) {
     try {
       const text = await infoPlistFile.text();
@@ -158,6 +159,7 @@ window.handleAppSelect = async function(event, stepId) {
         return match ? match[1] : null;
       };
       appName = getPlistValue(text, "CFBundleName");
+      bundleId = getPlistValue(text, "CFBundleIdentifier");
     } catch (e) { console.error(e); }
   }
 
@@ -166,15 +168,20 @@ window.handleAppSelect = async function(event, stepId) {
     appName = rootDir.toLowerCase().endsWith(".app") ? rootDir.slice(0, -4) : rootDir;
   }
 
-  if (appName) {
-    const step = findStepById(stepId);
-    if (step) {
+  const step = findStepById(stepId);
+  if (step) {
+    if (step.kind === "check") {
+      step.appName = appName || "";
+      step.bundleId = bundleId || "";
+      refreshFlowViews();
+      setStatus(`アプリ設定を更新しました: ${appName} (${bundleId || "ID取得不可"})`);
+    } else if (appName) {
       step.appName = appName;
       refreshFlowViews();
       setStatus("アプリ名を自動設定しました: " + appName);
     }
   } else {
-    setStatus("アプリ名が取得できませんでした");
+    setStatus("ステップが見つかりませんでした");
   }
   event.target.value = "";
 };
@@ -754,6 +761,51 @@ document.addEventListener("DOMContentLoaded", () => {
       refreshFlowViews();
     } else if (t.dataset.action === "select-app") {
       document.getElementById(`file-app-${t.dataset.stepId}`).click();
+    } else if (t.dataset.action === "toggle-presets") {
+      const menu = document.getElementById(`preset-menu-${t.dataset.stepId}`);
+      if (menu) {
+        menu.classList.toggle("hidden");
+        // メニュー以外をクリックした時に閉じるための処理
+        const closeMenu = (e) => {
+          if (!menu.contains(e.target) && e.target !== t) {
+            menu.classList.add("hidden");
+            document.removeEventListener("click", closeMenu);
+          }
+        };
+        if (!menu.classList.contains("hidden")) {
+          setTimeout(() => document.addEventListener("click", closeMenu), 0);
+        }
+      }
+    } else {
+      const presetItem = t.closest(".preset-item");
+      if (presetItem) {
+        e.preventDefault();
+        e.stopPropagation();
+        const { name, id, stepId } = presetItem.dataset;
+        const step = findStepById(Number(stepId));
+        if (step) {
+          saveHistory();
+          if (step.kind === "check") {
+            step.appName = name;
+            step.bundleId = id;
+            // DOMを直接更新して即時反映を見せる
+            const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
+            if (input) input.value = name;
+          } else {
+            step.appName = name;
+            // DOMを直接更新して即時反映を見せる
+            const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
+            if (input) input.value = name;
+          }
+          setStatus(`プリセット「${name}」を適用しました`);
+          // メニューを閉じる
+          const menu = presetItem.closest(".preset-menu");
+          if (menu) menu.classList.add("hidden");
+          
+          // 全体の整合性をとるために再描画
+          refreshFlowViews();
+        }
+      }
     }
   };
 
@@ -766,7 +818,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Selection logic
   document.addEventListener("mousedown", (e) => {
-    if (e.target.closest("button") || e.target.closest("input") || e.target.closest("select")) return;
+    if (e.target.closest("button") || e.target.closest("input") || e.target.closest("select") || e.target.closest(".preset-item") || e.target.closest(".preset-btn")) return;
     const stepEl = e.target.closest(".flow-step");
     const splitColEl = e.target.closest(".flow-split-col");
     if (stepEl) {

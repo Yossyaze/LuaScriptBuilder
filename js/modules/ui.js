@@ -1,5 +1,5 @@
 import { state, normalizeStep, findStepById } from "./state.js";
-import { hotkeys, hotkeyLabels, hotkeyDisplayIds } from "./constants.js";
+import { hotkeys, hotkeyLabels, hotkeyDisplayIds, APP_PRESETS } from "./constants.js";
 import { num, txt, escapeHtml } from "./utils.js";
 
 export function hotkeyToDisplay(hk) {
@@ -115,6 +115,12 @@ function renderStepCard(step, stepNum, isLast = false) {
       <div style="display: flex; flex-direction: column; gap: 5px;">
         <div class="step-key-label-group">
           <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (クリック対象)" />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+            </div>
+          </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
           <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
         </div>
@@ -140,6 +146,12 @@ function renderStepCard(step, stepNum, isLast = false) {
     displayContent = `
       <div class="step-key-label-group">
         <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (前面に出す)" />
+        <div class="preset-dropdown-container">
+          <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+          <div class="preset-menu hidden" id="preset-menu-${step.id}">
+            ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+          </div>
+        </div>
         <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
         <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
       </div>
@@ -147,12 +159,25 @@ function renderStepCard(step, stepNum, isLast = false) {
     editorContent = "";
   } else if (step.kind === "check") {
     displayContent = `
-      <div class="step-key-label-group" style="align-items: center; gap: 8px;">
-        <input type="text" class="step-input" style="flex:1;" data-field="text" data-step-id="${step.id}" value="${escapeHtml(step.text || "")}" placeholder="検知するテキストを入力..." />
-        <label style="display:flex; align-items:center; gap:4px; font-size:0.75rem; color:#64748b; cursor:pointer; white-space:nowrap;">
-          <input type="checkbox" data-field="useRegex" data-step-id="${step.id}" ${step.useRegex ? "checked" : ""} style="width:14px; height:14px; margin:0;" />
-          正規表現
-        </label>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="step-key-label-group" style="align-items: center; gap: 8px;">
+          <input type="text" class="step-input" style="flex:1;" data-field="text" data-step-id="${step.id}" value="${escapeHtml(step.text || "")}" placeholder="検知するテキストを入力..." />
+          <label style="display:flex; align-items:center; gap:4px; font-size:0.75rem; color:#64748b; cursor:pointer; white-space:nowrap;">
+            <input type="checkbox" data-field="useRegex" data-step-id="${step.id}" ${step.useRegex ? "checked" : ""} style="width:14px; height:14px; margin:0;" />
+            正規表現
+          </label>
+        </div>
+        <div class="step-key-label-group" style="align-items: center; gap: 8px;">
+          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="対象アプリ (例: QuickTime Player)" />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+            </div>
+          </div>
+          <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+        </div>
       </div>
     `;
     editorContent = "";

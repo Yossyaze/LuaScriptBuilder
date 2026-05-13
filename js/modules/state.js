@@ -136,6 +136,8 @@ export function normalizeStep(step) {
   } else if (s.kind === "check") {
     s.text = (step.text || "").trim();
     s.useRegex = !!step.useRegex;
+    s.bundleId = (step.bundleId || "").trim();
+    s.appName = (step.appName || "QuickTime Player").trim();
     s.okWaitBefore = normalizeWaitAfter(step.okWaitBefore, 0.5);
     s.ngWaitBefore = normalizeWaitAfter(step.ngWaitBefore, 0.5);
     s.okBranch = Array.isArray(step.okBranch)

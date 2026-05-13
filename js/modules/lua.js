@@ -164,6 +164,10 @@ local function createSequence(config)
           runStep(nextIdx)
         end)
       end, {"run", "GetScreenText"})
+      
+      if s.bundleId and s.bundleId ~= "" then
+        task:setInput(s.bundleId)
+      end
       task:start()
       return
     elseif s.type == "move" then
@@ -325,6 +329,7 @@ local allSequences = {}
       } else if (s.kind === "check") {
         lua += `      text = "${luaString(s.text)}",\n`;
         lua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
+        lua += `      bundleId = "${luaString(s.bundleId || "")}",\n`;
         lua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
         lua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
         lua += `      okIndex = ${s.luaOkIndex || "nil"},\n`;
