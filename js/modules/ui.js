@@ -4,15 +4,15 @@ import { num, txt, escapeHtml } from "./utils.js";
 
 export function hotkeyToDisplay(hk) {
   if (!hk || !hk.key) return "未設定";
-  const m = hk.mods
+  const m = (hk.mods || [])
     .map((mod) => mod.charAt(0).toUpperCase() + mod.slice(1))
     .join("+");
-  return (m ? m + "+" : "") + hk.key.toUpperCase();
+  return (m ? m + "+" : "") + keyToDisplay(hk.key);
 }
 
 export function keyToDisplay(key) {
   if (!key) return "未設定";
-  if (key === " ") return "SPACE";
+  if (key === " " || key === "space") return "SPACE";
   return key.toUpperCase();
 }
 
@@ -211,7 +211,7 @@ function renderStepCard(step, stepNum, isLast = false) {
     displayContent = `
       <div class="step-key-label-group">
         <span class="step-key-label">入力キー:</span>
-        <span class="step-key-badge">${step.key ? keyToDisplay(step.key) : "未設定"}</span>
+        <span class="step-key-badge">${hotkeyToDisplay(step)}</span>
       </div>
     `;
     editorContent = `<button type="button" class="record-btn btn-small${state.recordingStepId === step.id ? " recording" : ""}" data-action="record-step" data-step-id="${step.id}">

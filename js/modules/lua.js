@@ -199,6 +199,8 @@ local function createSequence(config)
       return
     elseif s.type == "focus" then
       hs.application.launchOrFocus(s.appName)
+    elseif s.type == "key" then
+      hs.eventtap.keyStroke(s.mods or {}, s.key or "space", 0)
     else
       hs.eventtap.keyStroke({}, s.key or "space", 0)
     end
@@ -319,6 +321,7 @@ local allSequences = {}
         lua += `      mods = ${modsToLua(hk.mods)},\n`;
       } else if (s.kind === "key") {
         lua += `      key = "${luaString(s.key)}",\n`;
+        lua += `      mods = ${modsToLua(s.mods || [])},\n`;
       } else if (s.kind === "click") {
         lua += `      appName = "${luaString(s.appName)}",\n`;
         lua += `      x = ${s.x},\n`;

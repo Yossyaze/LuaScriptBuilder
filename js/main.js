@@ -594,10 +594,12 @@ function captureHotkey(e) {
     state.recordingTarget = null;
     renderHotkeys();
   } else if (state.recordingStepId) {
-
     saveHistory();
     const step = findStepById(state.recordingStepId);
-    if (step) step.key = key;
+    if (step) {
+      step.key = key;
+      step.mods = mods;
+    }
     state.recordingStepId = null;
   }
   refreshFlowViews();

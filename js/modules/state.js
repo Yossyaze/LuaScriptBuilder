@@ -165,6 +165,7 @@ export function normalizeStep(step) {
   } else {
     s.kind = "key";
     s.key = (step.key || "space").trim().toLowerCase() || "space";
+    s.mods = Array.isArray(step.mods) ? step.mods : [];
   }
   
   // CHECKステップの場合は合流後の待機をデフォルト0にする
