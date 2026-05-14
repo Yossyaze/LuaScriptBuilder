@@ -1,10 +1,9 @@
 import { state, flushActiveProject } from './state.js';
 import { hotkeys, NEW_STORAGE_KEY, OLD_STORAGE_KEY } from './constants.js';
+import { saveUserData } from './firebase.js';
 
 export function saveToStorage() {
   flushActiveProject();
-  // state.globalSettings が既に最新であることを前提とするため、ここでの明示的な代入は不要または整理
-  // hotkeys 定数への書き戻しも行わない
 
   const data = {
     activeProjectId: state.activeProjectId,
@@ -13,6 +12,11 @@ export function saveToStorage() {
     projectOrder: state.projectOrder,
   };
   localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(data));
+
+  // Firebaseに同期
+  if (state.user) {
+    saveUserData(state.user.uid, data);
+  }
 }
 
 export function loadFromStorage(callbacks) {
@@ -20,35 +24,7 @@ export function loadFromStorage(callbacks) {
   if (newJson) {
     try {
       const data = JSON.parse(newJson);
-      state.projects = data.projects || {};
-      const loadedOrder = data.projectOrder || [];
-      const projectIds = Object.keys(state.projects);
-      // 読み込まれた順序を維持しつつ、漏れているプロジェクトがあれば追加
-      state.projectOrder = [
-        ...loadedOrder.filter(id => projectIds.includes(id)),
-        ...projectIds.filter(id => !loadedOrder.includes(id))
-      ];
-      const savedActiveId = data.activeProjectId;
-      if (data.globalSettings) {
-        if (data.globalSettings.reloadHotkey) {
-          state.globalSettings.reloadHotkey = data.globalSettings.reloadHotkey;
-        }
-        if (data.globalSettings.ipadMove) {
-          state.globalSettings.ipadMove = data.globalSettings.ipadMove;
-        }
-        if (data.globalSettings.iphoneMove) {
-          state.globalSettings.iphoneMove = data.globalSettings.iphoneMove;
-        }
-        if (data.globalSettings.stopAllHotkey) {
-          state.globalSettings.stopAllHotkey = data.globalSettings.stopAllHotkey;
-        }
-      }
-      if (savedActiveId && state.projects[savedActiveId]) {
-        callbacks.loadProjectState(savedActiveId);
-      } else {
-        const firstKey = Object.keys(state.projects)[0];
-        if (firstKey) callbacks.loadProjectState(firstKey);
-      }
+      applyDataToState(data, callbacks);
       return true;
     } catch (e) {
       console.error("Failed to load new storage format", e);
@@ -93,4 +69,31 @@ export function loadFromStorage(callbacks) {
     }
   }
   return false;
+}
+
+/**
+ * 取得したデータを状態に反映
+ */
+export function applyDataToState(data, callbacks) {
+  if (!data) return;
+
+  state.projects = data.projects || {};
+  const loadedOrder = data.projectOrder || [];
+  const projectIds = Object.keys(state.projects);
+  state.projectOrder = [
+    ...loadedOrder.filter(id => projectIds.includes(id)),
+    ...projectIds.filter(id => !loadedOrder.includes(id))
+  ];
+
+  if (data.globalSettings) {
+    Object.assign(state.globalSettings, data.globalSettings);
+  }
+
+  const savedActiveId = data.activeProjectId;
+  if (savedActiveId && state.projects[savedActiveId]) {
+    callbacks.loadProjectState(savedActiveId);
+  } else {
+    const firstKey = Object.keys(state.projects)[0];
+    if (firstKey) callbacks.loadProjectState(firstKey);
+  }
 }

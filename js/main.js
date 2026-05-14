@@ -15,8 +15,45 @@ import {
 } from './modules/ui.js';
 import { updateMermaidGraph } from './modules/flowchart.js';
 import { HistoryManager } from './modules/history.js';
+import { onAuthChange, loginWithGoogle, logout, loadUserData } from './modules/firebase.js';
+import { applyDataToState } from './modules/storage.js';
+import { updateAuthUI } from './modules/ui.js';
 
 const history = new HistoryManager();
+
+/**
+ * ログイン処理
+ */
+window.handleLogin = async () => {
+  try {
+    const user = await loginWithGoogle();
+    if (user) {
+      setStatus("ログインしました");
+      // データの読み込み
+      const cloudData = await loadUserData(user.uid);
+      if (cloudData && confirm("クラウド上のデータを読み込みますか？（現在のローカルデータは上書きされます）")) {
+        applyDataToState(cloudData, { loadProjectState: window.loadProjectState });
+        saveToStorage();
+      }
+    }
+  } catch (error) {
+    setStatus("ログインに失敗しました", true);
+  }
+};
+
+/**
+ * ログアウト処理
+ */
+window.handleLogout = async () => {
+  try {
+    await logout();
+    state.user = null;
+    updateAuthUI(null);
+    setStatus("ログアウトしました");
+  } catch (error) {
+    setStatus("ログアウトに失敗しました", true);
+  }
+};
 
 function saveHistory() {
   flushActiveProject();
@@ -623,6 +660,17 @@ document.addEventListener("DOMContentLoaded", () => {
     createNewProject("Default Project");
   }
 
+  // Firebase認証状態の監視
+  onAuthChange((user) => {
+    state.user = user;
+    updateAuthUI(user);
+    if (user) {
+      console.log("Logged in as:", user.displayName);
+      // ログイン時は自動的に保存（同期）を走らせる
+      saveToStorage();
+    }
+  });
+
   setupAddStepButtons();
 
   // Event Listeners for Static Elements
@@ -791,8 +839,8 @@ document.addEventListener("DOMContentLoaded", () => {
             step.appName = name;
             step.bundleId = id;
             // DOMを直接更新して即時反映を見せる
-            const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
-            if (input) input.value = name;
+            const input = document.querySelector(`input[data-field="bundleId"][data-step-id="${stepId}"]`);
+            if (input) input.value = id;
           } else {
             step.appName = name;
             // DOMを直接更新して即時反映を見せる

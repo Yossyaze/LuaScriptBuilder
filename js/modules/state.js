@@ -18,6 +18,7 @@ export const state = {
   flowSteps: [],
   templateStepIds: {},
   projectOrder: [],
+  user: null,
 };
 
 export function nextStepId() {

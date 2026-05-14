@@ -100,8 +100,11 @@ local function createSequence(config)
     end
 
     local s = config.steps[index]
+    local frontApp = hs.application.frontmostApplication()
+    local frontAppName = frontApp and frontApp:name() or "Unknown"
+
     local stepLabel = string.format("STEP=%s index=%d", s.displayNum or "?", index)
-    logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s", s.type, s.label))
+    logStep(config.enableTimelineLog, cycleCount, stepLabel, string.format("type=%s label=%s | focus=%s", s.type, s.label, frontAppName))
     showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or 0, s.label))
 
     if s.type == "stop" then
@@ -171,6 +174,8 @@ local function createSequence(config)
       task:start()
       return
     elseif s.type == "move" then
+      local modsStr = table.concat(s.mods or {}, ",")
+      logStep(config.enableTimelineLog, cycleCount, "KEY_MOVE", string.format("key=%s mods=[%s] focus=%s", s.key, modsStr, frontAppName))
       hs.eventtap.keyStroke(s.mods or {}, s.key, 0)
     elseif s.type == "click" then
       local app = hs.application.find(s.appName)
@@ -200,8 +205,11 @@ local function createSequence(config)
     elseif s.type == "focus" then
       hs.application.launchOrFocus(s.appName)
     elseif s.type == "key" then
+      local modsStr = table.concat(s.mods or {}, ",")
+      logStep(config.enableTimelineLog, cycleCount, "KEY_PRESS", string.format("key=%s mods=[%s] focus=%s", s.key or "space", modsStr, frontAppName))
       hs.eventtap.keyStroke(s.mods or {}, s.key or "space", 0)
     else
+      logStep(config.enableTimelineLog, cycleCount, "KEY_UNKNOWN", string.format("type=%s key=%s focus=%s", s.type, s.key or "space", frontAppName))
       hs.eventtap.keyStroke({}, s.key or "space", 0)
     end
 
@@ -332,7 +340,7 @@ local allSequences = {}
       } else if (s.kind === "check") {
         lua += `      text = "${luaString(s.text)}",\n`;
         lua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
-        lua += `      bundleId = "${luaString(s.bundleId || "")}",\n`;
+        lua += `      bundleId = "${luaString(s.bundleId || s.appName || "")}",\n`;
         lua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
         lua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
         lua += `      okIndex = ${s.luaOkIndex || "nil"},\n`;
