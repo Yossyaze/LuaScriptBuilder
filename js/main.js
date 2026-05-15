@@ -678,46 +678,72 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("Logged in as:", user.displayName);
       
       // クラウド上のデータ変更を購読
-      unsubscribeCloud = subscribeUserData(user.uid, (cloudData) => {
-        if (!cloudData) return;
+      unsubscribeCloud = subscribeUserData(user.uid, (cloudData, firestoreUpdatedAt) => {
+        if (!cloudData) {
+          console.log("No cloud data found for this user.");
+          return;
+        }
 
         // ローカルデータの取得
         const localJson = localStorage.getItem(NEW_STORAGE_KEY);
         const localData = localJson ? JSON.parse(localJson) : null;
 
         // タイムスタンプの比較
-        const cloudTime = cloudData.lastUpdatedAt ? new Date(cloudData.lastUpdatedAt).getTime() : 0;
+        // 1. JSON内のタイムスタンプ 2. Firestoreドキュメントの updated_at 3. 0
+        const cloudTime = cloudData.lastUpdatedAt ? new Date(cloudData.lastUpdatedAt).getTime() : 
+                          (firestoreUpdatedAt ? new Date(firestoreUpdatedAt).getTime() : 0);
         const localTime = (localData && localData.lastUpdatedAt) ? new Date(localData.lastUpdatedAt).getTime() : 0;
 
-        // すでに確認済み、またはクラウドの方が古い場合はスキップ
-        if (cloudTime <= lastPromptedCloudTime || cloudTime <= localTime) return;
+        console.log(`Cloud data received. CloudTime: ${cloudTime}, LocalTime: ${localTime}`);
 
-        // ローカルが実質空、またはデフォルトプロジェクトしかない場合は確認なしで適用
-        const isLocalEmpty = !localData || (Object.keys(localData.projects || {}).length <= 1 && 
-                             localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
-                             (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0);
+        // すでに確認済みのタイムスタンプならスキップ
+        if (cloudTime > 0 && cloudTime <= lastPromptedCloudTime) {
+          console.log("This cloud version was already handled.");
+          return;
+        }
 
-        if (isLocalEmpty) {
-          applyCloud();
-        } else {
-          // データがある場合は確認
-          if (confirm("クラウド上に新しいデータが見つかりました。読み込みますか？\n（現在の端末上のデータは上書きされます）")) {
+        // ローカルが実質空、またはデフォルトプロジェクトしかないかどうかの判定
+        const isLocalDefault = localData && Object.keys(localData.projects || {}).length <= 1 && 
+                               localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
+                               (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0;
+        const isLocalEmpty = !localData || isLocalDefault;
+
+        // 同期すべき条件:
+        // A. ローカルが空で、クラウドにデータがある
+        // B. クラウドの方が新しい
+        // C. ローカルが古い形式（タイムスタンプなし）で、クラウドにデータがある
+        if (isLocalEmpty || cloudTime > localTime || (localTime === 0 && cloudTime >= 0)) {
+          if (isLocalEmpty) {
+            console.log("Local is empty. Applying cloud data automatically.");
             applyCloud();
+          } else if (cloudTime === localTime && cloudTime > 0) {
+            // 同時刻なら何もしない
+            return;
           } else {
-            // キャンセルした場合はこのタイムスタンプを記憶して再度聞かないようにする
-            lastPromptedCloudTime = cloudTime;
+            // データがある場合は確認
+            console.log("Newer cloud data found. Asking for confirmation.");
+            if (confirm("クラウド上にデータが見つかりました。読み込みますか？\n（現在の端末上のデータは上書きされます）")) {
+              applyCloud();
+            } else {
+              lastPromptedCloudTime = cloudTime;
+            }
           }
+        } else {
+          console.log("Local data is newer or same as cloud. Skipping cloud update.");
         }
 
         function applyCloud() {
-          console.log("Applying newer data from cloud...");
+          console.log("Applying data from cloud...");
           isApplyingCloudData = true;
           lastPromptedCloudTime = cloudTime;
           try {
             applyDataToState(cloudData, { loadProjectState: window.loadProjectState });
             // localStorage にも保存しておく（再起動時のため）
             localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(cloudData));
-            setStatus("クラウドから最新のデータを同期しました");
+            setStatus("クラウドからデータを同期しました");
+          } catch (e) {
+            console.error("Failed to apply cloud data:", e);
+            setStatus("データの同期に失敗しました", true);
           } finally {
             isApplyingCloudData = false;
           }
