@@ -703,10 +703,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // ローカルが実質空、またはデフォルトプロジェクトしかないかどうかの判定
-        const isLocalDefault = localData && Object.keys(localData.projects || {}).length <= 1 && 
-                               localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
-                               (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0;
-        const isLocalEmpty = !localData || isLocalDefault;
+        const isLocalEmpty = !localData || 
+                             !localData.projects || 
+                             Object.keys(localData.projects).length === 0 ||
+                             (Object.keys(localData.projects).length === 1 && 
+                              localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
+                              (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0);
 
         // 同期すべき条件:
         // A. ローカルが空で、クラウドにデータがある
@@ -741,10 +743,15 @@ document.addEventListener("DOMContentLoaded", () => {
             // localStorage にも保存しておく（再起動時のため）
             localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(cloudData));
             setStatus("クラウドからデータを同期しました");
+            
+            // 画面更新の setTimeout (10ms) が確実に終わるまでフラグを維持
+            setTimeout(() => {
+              isApplyingCloudData = false;
+              console.log("Cloud sync flag cleared.");
+            }, 100);
           } catch (e) {
             console.error("Failed to apply cloud data:", e);
             setStatus("データの同期に失敗しました", true);
-          } finally {
             isApplyingCloudData = false;
           }
         }
