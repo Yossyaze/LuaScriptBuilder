@@ -10,6 +10,7 @@ export function saveToStorage() {
     projects: state.projects,
     globalSettings: state.globalSettings,
     projectOrder: state.projectOrder,
+    lastUpdatedAt: new Date().toISOString(), // タイムスタンプを追加
   };
   localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(data));
 

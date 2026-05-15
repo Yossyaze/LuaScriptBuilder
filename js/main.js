@@ -15,11 +15,14 @@ import {
 } from './modules/ui.js';
 import { updateMermaidGraph } from './modules/flowchart.js';
 import { HistoryManager } from './modules/history.js';
-import { onAuthChange, loginWithGoogle, logout, loadUserData } from './modules/firebase.js';
+import { onAuthChange, loginWithGoogle, logout, loadUserData, subscribeUserData } from './modules/firebase.js';
 import { applyDataToState } from './modules/storage.js';
 import { updateAuthUI } from './modules/ui.js';
 
 const history = new HistoryManager();
+let unsubscribeCloud = null;
+let isApplyingCloudData = false;
+let lastPromptedCloudTime = 0; // すでに確認ダイアログを出したクラウドのタイムスタンプ
 
 /**
  * ログイン処理
@@ -29,12 +32,6 @@ window.handleLogin = async () => {
     const user = await loginWithGoogle();
     if (user) {
       setStatus("ログインしました");
-      // データの読み込み
-      const cloudData = await loadUserData(user.uid);
-      if (cloudData && confirm("クラウド上のデータを読み込みますか？（現在のローカルデータは上書きされます）")) {
-        applyDataToState(cloudData, { loadProjectState: window.loadProjectState });
-        saveToStorage();
-      }
     }
   } catch (error) {
     setStatus("ログインに失敗しました", true);
@@ -162,7 +159,10 @@ window.refreshFlowViews = function() {
   if (refreshTimeout) clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(() => {
     updateFlowPreview();
-    saveToStorage();
+    // クラウドデータ適用中（同期中）は保存を走らせない
+    if (!isApplyingCloudData) {
+      saveToStorage();
+    }
     refreshTimeout = null;
   }, 10);
 };
@@ -667,10 +667,62 @@ document.addEventListener("DOMContentLoaded", () => {
   onAuthChange((user) => {
     state.user = user;
     updateAuthUI(user);
+
+    // 以前の購読を解除
+    if (unsubscribeCloud) {
+      unsubscribeCloud();
+      unsubscribeCloud = null;
+    }
+
     if (user) {
       console.log("Logged in as:", user.displayName);
-      // ログイン時は自動的に保存（同期）を走らせる
-      saveToStorage();
+      
+      // クラウド上のデータ変更を購読
+      unsubscribeCloud = subscribeUserData(user.uid, (cloudData) => {
+        if (!cloudData) return;
+
+        // ローカルデータの取得
+        const localJson = localStorage.getItem(NEW_STORAGE_KEY);
+        const localData = localJson ? JSON.parse(localJson) : null;
+
+        // タイムスタンプの比較
+        const cloudTime = cloudData.lastUpdatedAt ? new Date(cloudData.lastUpdatedAt).getTime() : 0;
+        const localTime = (localData && localData.lastUpdatedAt) ? new Date(localData.lastUpdatedAt).getTime() : 0;
+
+        // すでに確認済み、またはクラウドの方が古い場合はスキップ
+        if (cloudTime <= lastPromptedCloudTime || cloudTime <= localTime) return;
+
+        // ローカルが実質空、またはデフォルトプロジェクトしかない場合は確認なしで適用
+        const isLocalEmpty = !localData || (Object.keys(localData.projects || {}).length <= 1 && 
+                             localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
+                             (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0);
+
+        if (isLocalEmpty) {
+          applyCloud();
+        } else {
+          // データがある場合は確認
+          if (confirm("クラウド上に新しいデータが見つかりました。読み込みますか？\n（現在の端末上のデータは上書きされます）")) {
+            applyCloud();
+          } else {
+            // キャンセルした場合はこのタイムスタンプを記憶して再度聞かないようにする
+            lastPromptedCloudTime = cloudTime;
+          }
+        }
+
+        function applyCloud() {
+          console.log("Applying newer data from cloud...");
+          isApplyingCloudData = true;
+          lastPromptedCloudTime = cloudTime;
+          try {
+            applyDataToState(cloudData, { loadProjectState: window.loadProjectState });
+            // localStorage にも保存しておく（再起動時のため）
+            localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(cloudData));
+            setStatus("クラウドから最新のデータを同期しました");
+          } finally {
+            isApplyingCloudData = false;
+          }
+        }
+      });
     }
   });
 

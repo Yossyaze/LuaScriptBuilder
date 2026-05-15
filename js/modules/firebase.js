@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { firebaseConfig } from '../firebase-config.js';
 
 // Firebaseの初期化
@@ -94,6 +94,27 @@ export async function loadUserData(userId) {
     console.error("Firestore load failed:", error);
     return null;
   }
+}
+
+/**
+ * クラウド上のデータ変更を購読
+ * @param {string} userId 
+ * @param {function} callback 
+ */
+export function subscribeUserData(userId, callback) {
+  if (!db) return () => {};
+  const userDoc = doc(db, 'users', userId);
+  return onSnapshot(userDoc, (docSnap) => {
+    if (docSnap.exists()) {
+      const payload = docSnap.data();
+      const data = payload.data ? JSON.parse(payload.data) : null;
+      callback(data, payload.updatedAt);
+    } else {
+      callback(null, null);
+    }
+  }, (error) => {
+    console.error("Firestore subscription failed:", error);
+  });
 }
 
 /**
