@@ -651,7 +651,7 @@ export function updateProjectTabs(
 /**
  * 認証状態に応じてUIを更新
  */
-export function updateAuthUI(user, syncStatus = 'synced') {
+export function updateAuthUI(user, syncStatus = state.sync.status) {
   const container = document.getElementById('authSection');
   if (!container) return;
 
@@ -668,8 +668,15 @@ export function updateAuthUI(user, syncStatus = 'synced') {
 
   if (user) {
     // ログイン済み
-    const statusText = syncStatus === 'syncing' ? '同期中...' : '同期済み';
-    const statusClass = syncStatus === 'syncing' ? 'syncing' : 'synced';
+    const statusText = syncStatus === 'syncing' ? '同期中...' : (syncStatus === 'error' ? '同期エラー' : '同期済み');
+    const statusClass = syncStatus;
+
+    // 最終同期時刻のフォーマット
+    let lastSyncedText = '';
+    if (state.sync.lastSyncedAt) {
+      const date = new Date(state.sync.lastSyncedAt);
+      lastSyncedText = ` (${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')})`;
+    }
 
     container.innerHTML = `
       <div class="user-profile">
@@ -678,7 +685,7 @@ export function updateAuthUI(user, syncStatus = 'synced') {
           <span class="user-name">${escapeHtml(user.displayName || 'User')}</span>
           <div class="sync-status ${statusClass}">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-            ${statusText}
+            ${statusText}${lastSyncedText}
           </div>
         </div>
       </div>

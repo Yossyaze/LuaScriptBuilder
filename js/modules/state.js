@@ -19,6 +19,12 @@ export const state = {
   templateStepIds: {},
   projectOrder: [],
   user: null,
+  sync: {
+    isApplyingCloudData: false,
+    isManualLogin: false,
+    lastSyncedAt: null,
+    status: 'synced', // 'synced', 'syncing', 'error'
+  },
 };
 
 export function nextStepId() {

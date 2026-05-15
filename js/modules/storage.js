@@ -74,27 +74,63 @@ export function loadFromStorage(callbacks) {
 
 /**
  * 取得したデータを状態に反映
+ * @param {object} data - 反映するデータ
+ * @param {object} callbacks - コールバック
+ * @param {boolean} append - true の場合、既存のプロジェクトを上書きせず末尾に追加する
  */
-export function applyDataToState(data, callbacks) {
+export function applyDataToState(data, callbacks, append = false) {
   if (!data) return;
 
-  state.projects = data.projects || {};
-  const loadedOrder = data.projectOrder || [];
-  const projectIds = Object.keys(state.projects);
-  state.projectOrder = [
-    ...loadedOrder.filter(id => projectIds.includes(id)),
-    ...projectIds.filter(id => !loadedOrder.includes(id))
-  ];
+  if (append) {
+    // 追加モード: 現在のプロジェクトを維持し、クラウドのものを末尾に追加
+    const cloudProjects = data.projects || {};
+    const cloudOrder = data.projectOrder || Object.keys(cloudProjects);
+    
+    cloudOrder.forEach(id => {
+      let targetId = id;
+      const projectData = cloudProjects[id];
+      if (!projectData) return;
 
-  if (data.globalSettings) {
-    Object.assign(state.globalSettings, data.globalSettings);
-  }
+      // IDが衝突する場合（既にある場合）は、クラウド側を別IDとして扱う
+      if (state.projects[targetId]) {
+        targetId = `cloud-${id}-${Date.now()}`;
+        // プロジェクト内のIDフィールドも同期
+        projectData.id = targetId;
+      }
+      
+      state.projects[targetId] = projectData;
+      if (!state.projectOrder.includes(targetId)) {
+        state.projectOrder.push(targetId);
+      }
+    });
 
-  const savedActiveId = data.activeProjectId;
-  if (savedActiveId && state.projects[savedActiveId]) {
-    callbacks.loadProjectState(savedActiveId);
+    // globalSettings は常にクラウド側の最新に合わせる（マージ）
+    if (data.globalSettings) {
+      Object.assign(state.globalSettings, data.globalSettings);
+    }
+    
+    // 追加モードでは activeProjectId は変更しない（現在の作業を邪魔しない）
+    
   } else {
-    const firstKey = Object.keys(state.projects)[0];
-    if (firstKey) callbacks.loadProjectState(firstKey);
+    // 全反映モード: 従来の挙動
+    state.projects = data.projects || {};
+    const loadedOrder = data.projectOrder || [];
+    const projectIds = Object.keys(state.projects);
+    state.projectOrder = [
+      ...loadedOrder.filter(id => projectIds.includes(id)),
+      ...projectIds.filter(id => !loadedOrder.includes(id))
+    ];
+
+    if (data.globalSettings) {
+      Object.assign(state.globalSettings, data.globalSettings);
+    }
+
+    const savedActiveId = data.activeProjectId;
+    if (savedActiveId && state.projects[savedActiveId]) {
+      callbacks.loadProjectState(savedActiveId);
+    } else {
+      const firstKey = Object.keys(state.projects)[0];
+      if (firstKey) callbacks.loadProjectState(firstKey);
+    }
   }
 }

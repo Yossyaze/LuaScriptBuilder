@@ -21,7 +21,6 @@ import { updateAuthUI } from './modules/ui.js';
 
 const history = new HistoryManager();
 let unsubscribeCloud = null;
-let isApplyingCloudData = false;
 let lastPromptedCloudTime = 0; // すでに確認ダイアログを出したクラウドのタイムスタンプ
 
 /**
@@ -29,11 +28,15 @@ let lastPromptedCloudTime = 0; // すでに確認ダイアログを出したク�
  */
 window.handleLogin = async () => {
   try {
+    state.sync.isManualLogin = true; // ログインボタン経由であることを示す
     const user = await loginWithGoogle();
     if (user) {
       setStatus("ログインしました");
+    } else {
+      state.sync.isManualLogin = false;
     }
   } catch (error) {
+    state.sync.isManualLogin = false;
     setStatus("ログインに失敗しました", true);
   }
 };
@@ -160,7 +163,7 @@ window.refreshFlowViews = function() {
   refreshTimeout = setTimeout(() => {
     updateFlowPreview();
     // クラウドデータ適用中（同期中）は保存を走らせない
-    if (!isApplyingCloudData) {
+    if (!state.sync.isApplyingCloudData) {
       saveToStorage();
     }
     refreshTimeout = null;
@@ -679,6 +682,9 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // クラウド上のデータ変更を購読
       unsubscribeCloud = subscribeUserData(user.uid, (cloudData, firestoreUpdatedAt) => {
+        // 適用中（自分が保存した結果の通知など）は無視して無限ループを防ぐ
+        if (state.sync.isApplyingCloudData) return;
+
         if (!cloudData) {
           console.log("No cloud data found for this user.");
           return;
@@ -689,18 +695,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const localData = localJson ? JSON.parse(localJson) : null;
 
         // タイムスタンプの比較
-        // 1. JSON内のタイムスタンプ 2. Firestoreドキュメントの updated_at 3. 0
         const cloudTime = cloudData.lastUpdatedAt ? new Date(cloudData.lastUpdatedAt).getTime() : 
                           (firestoreUpdatedAt ? new Date(firestoreUpdatedAt).getTime() : 0);
         const localTime = (localData && localData.lastUpdatedAt) ? new Date(localData.lastUpdatedAt).getTime() : 0;
 
-        console.log(`Cloud data received. CloudTime: ${cloudTime}, LocalTime: ${localTime}`);
-
-        // すでに確認済みのタイムスタンプならスキップ
-        if (cloudTime > 0 && cloudTime <= lastPromptedCloudTime) {
-          console.log("This cloud version was already handled.");
-          return;
-        }
+        console.log(`Cloud data received. CloudTime: ${cloudTime}, LocalTime: ${localTime}, ManualLogin: ${state.sync.isManualLogin}`);
 
         // ローカルが実質空、またはデフォルトプロジェクトしかないかどうかの判定
         const isLocalEmpty = !localData || 
@@ -710,49 +709,66 @@ document.addEventListener("DOMContentLoaded", () => {
                               localData.projects[Object.keys(localData.projects)[0]]?.name === "Default Project" &&
                               (localData.projects[Object.keys(localData.projects)[0]]?.flowSteps || []).length === 0);
 
-        // 同期すべき条件:
-        // A. ローカルが空で、クラウドにデータがある
-        // B. クラウドの方が新しい
-        // C. ローカルが古い形式（タイムスタンプなし）で、クラウドにデータがある
-        if (isLocalEmpty || cloudTime > localTime || (localTime === 0 && cloudTime >= 0)) {
-          if (isLocalEmpty) {
-            console.log("Local is empty. Applying cloud data automatically.");
-            applyCloud();
-          } else if (cloudTime === localTime && cloudTime > 0) {
-            // 同時刻なら何もしない
-            return;
+        if (isLocalEmpty) {
+          // A. ローカルが空なら、常に自動反映（復元）
+          console.log("Local is empty. Applying cloud data automatically.");
+          applyCloud(false);
+          state.sync.isManualLogin = false;
+        } else if (state.sync.isManualLogin) {
+          // B. ログインボタン経由の場合：末尾に追加（マージ）
+          state.sync.isManualLogin = false; // フラグを消費
+          if (cloudTime > 0 && cloudTime <= lastPromptedCloudTime) return;
+
+          console.log("Manual login detected. Asking for merge.");
+          if (confirm("クラウド上のプロジェクトを現在のリストの後ろに追加しますか？\n（現在のプロジェクトは上書きされません）")) {
+            applyCloud(true);
           } else {
-            // データがある場合は確認
-            console.log("Newer cloud data found. Asking for confirmation.");
-            if (confirm("クラウド上にデータが見つかりました。読み込みますか？\n（現在の端末上のデータは上書きされます）")) {
-              applyCloud();
-            } else {
-              lastPromptedCloudTime = cloudTime;
-            }
+            lastPromptedCloudTime = cloudTime;
+          }
+        } else if (cloudTime > localTime) {
+          // C. リロードや他端末での更新（自動復元）：上書き（同期）
+          if (cloudTime > 0 && cloudTime <= lastPromptedCloudTime) return;
+
+          console.log("Newer cloud data detected during reload/sync. Asking for override.");
+          if (confirm("クラウド上に新しいデータがあります。現在の内容を上書きして同期しますか？")) {
+            applyCloud(false);
+          } else {
+            lastPromptedCloudTime = cloudTime;
           }
         } else {
-          console.log("Local data is newer or same as cloud. Skipping cloud update.");
+          console.log("No significant cloud data or already handled. Skipping update.");
         }
 
-        function applyCloud() {
-          console.log("Applying data from cloud...");
-          isApplyingCloudData = true;
+        function applyCloud(appendMode) {
+          console.log(`Applying data from cloud (appendMode: ${appendMode})...`);
+          state.sync.isApplyingCloudData = true;
+          state.sync.status = 'syncing';
+          updateAuthUI(state.user, state.sync.status);
+          
           lastPromptedCloudTime = cloudTime;
           try {
-            applyDataToState(cloudData, { loadProjectState: window.loadProjectState });
-            // localStorage にも保存しておく（再起動時のため）
-            localStorage.setItem(NEW_STORAGE_KEY, JSON.stringify(cloudData));
-            setStatus("クラウドからデータを同期しました");
+            applyDataToState(cloudData, { loadProjectState: window.loadProjectState }, appendMode);
             
-            // 画面更新の setTimeout (10ms) が確実に終わるまでフラグを維持
+            // 追加モード（マージ）の場合は、マージ結果をクラウドにも即座に保存する
+            saveToStorage(); 
+
+            state.sync.lastSyncedAt = new Date().toISOString();
+            state.sync.status = 'synced';
+            updateAuthUI(state.user, state.sync.status);
+
+            setStatus(appendMode ? "クラウド上のプロジェクトを追加しました" : "クラウドからデータを同期しました");
+            
+            // サーバーへの保存が完了して snapshot が戻ってくるまでの時間を十分に稼ぐ
             setTimeout(() => {
-              isApplyingCloudData = false;
+              state.sync.isApplyingCloudData = false;
               console.log("Cloud sync flag cleared.");
-            }, 100);
+            }, 2000);
           } catch (e) {
             console.error("Failed to apply cloud data:", e);
+            state.sync.status = 'error';
+            updateAuthUI(state.user, state.sync.status);
             setStatus("データの同期に失敗しました", true);
-            isApplyingCloudData = false;
+            state.sync.isApplyingCloudData = false;
           }
         }
       });
