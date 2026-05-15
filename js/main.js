@@ -660,6 +660,9 @@ document.addEventListener("DOMContentLoaded", () => {
     createNewProject("Default Project");
   }
 
+  // 初期UIレンダリング（ログインボタン等）
+  updateAuthUI(null);
+
   // Firebase認証状態の監視
   onAuthChange((user) => {
     state.user = user;

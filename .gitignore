@@ -6,3 +6,6 @@ dist/
 .env
 .env.local
 .env.*.local
+.firebase/
+.agents/
+skills-lock.json

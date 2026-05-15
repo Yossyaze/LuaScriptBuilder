@@ -35,6 +35,42 @@ local function nowTimestamp()
   return os.date("%H:%M:%S", sec) .. string.format(".%03d", ms)
 end
 
+-- ==========================================
+-- ログ保存用ユーティリティ
+-- ==========================================
+local LOG_DIR = hs.configdir .. "/logs/"
+
+local function ensureLogDir()
+  local attributes = hs.fs.attributes(LOG_DIR)
+  if not attributes then
+    hs.fs.mkdir(LOG_DIR)
+  end
+end
+
+local function appendLog(msg)
+  ensureLogDir()
+  local f = io.open(LOG_DIR .. "current.log", "a")
+  if f then
+    f:write(msg .. "\\n")
+    f:close()
+  end
+end
+
+local function archiveLog(sequenceName)
+  ensureLogDir()
+  local currentPath = LOG_DIR .. "current.log"
+  local attributes = hs.fs.attributes(currentPath)
+  if not attributes then return end
+
+  local timestamp = os.date("%Y%m%d_%H%M%S")
+  -- ファイル名に使用できない文字を置換
+  local safeName = (sequenceName or "unknown"):gsub("[%s/\\\\?%%*:|\\"<> ]", "_")
+  local newPath = LOG_DIR .. string.format("log_%s_%s.log", safeName, timestamp)
+  
+  os.rename(currentPath, newPath)
+  print("Log archived: " .. newPath)
+end
+
 local function logStep(enableTimelineLog, cycleCount, step, detail)
   if not enableTimelineLog then return end
   local msg = string.format("%s | cycle=%d | %s", nowTimestamp(), cycleCount, step)
@@ -42,6 +78,7 @@ local function logStep(enableTimelineLog, cycleCount, step, detail)
     msg = msg .. " | " .. detail
   end
   print(msg)
+  appendLog(msg)
 end
 
 local function showAlert(config, message)
@@ -52,6 +89,7 @@ end
 local function createSequence(config)
   local running = false
   local cycleCount = 0
+  local stop -- 前方参照用に宣言
 
   local stepIdToIndex = {}
   for i, s in ipairs(config.steps) do
@@ -71,7 +109,7 @@ local function createSequence(config)
       local output, status = hs.execute(string.format("/usr/bin/grep -oE %s %s", qPattern, qTmp))
       os.remove(tmp)
       if status then
-        return true, (output or ""):gsub("\\n", " "):sub(1, 100)
+        return true, (output or ""):gsub("\\\\n", " "):sub(1, 100)
       end
     end
     return false, nil
@@ -93,8 +131,7 @@ local function createSequence(config)
           end
         end)
       else
-        running = false
-        hs.alert.show(string.format("[%s] 【完了】全ステップ終了", config.name), 2)
+        stop("全ステップ終了")
       end
       return
     end
@@ -108,8 +145,7 @@ local function createSequence(config)
     showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or 0, s.label))
 
     if s.type == "stop" then
-      running = false
-      hs.alert.show(string.format("[%s] 【停止】STOPステップ", config.name), 5)
+      stop("STOPステップ")
       return
     elseif s.type == "jump" then
       local nextIdx = nil
@@ -144,7 +180,7 @@ local function createSequence(config)
           end
         end
 
-        local cleanOut = (stdOut or ""):gsub("\\n", " "):sub(1, 200)
+        local cleanOut = (stdOut or ""):gsub("\\\\n", " "):sub(1, 200)
         local logDetail = string.format("pattern=%s | screen=%s", s.text, cleanOut)
         local waitBefore = 0.5
         local nextIdx = nil
@@ -230,14 +266,17 @@ local function createSequence(config)
     runStep(1)
   end
 
-  local function stop()
+  stop = function(reason)
     if not running then return end
     running = false
     if config._timer then
       config._timer:stop()
       config._timer = nil
     end
-    hs.alert.show(string.format("[%s] 【停止】", config.name), 2)
+    local alertMsg = "【停止】"
+    if reason then alertMsg = alertMsg .. reason end
+    hs.alert.show(string.format("[%s] %s", config.name, alertMsg), 2)
+    archiveLog(config.name)
   end
 
   return {
@@ -248,7 +287,7 @@ local function createSequence(config)
   }
 end
 
-local allSequences = {}
+local allSequences = {};
 `;
 
   Object.values(state.projects).forEach((p) => {

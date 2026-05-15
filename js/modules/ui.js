@@ -1,6 +1,7 @@
 import { state, normalizeStep, findStepById } from "./state.js";
 import { hotkeys, hotkeyLabels, hotkeyDisplayIds, APP_PRESETS } from "./constants.js";
 import { num, txt, escapeHtml } from "./utils.js";
+import { isFirebaseConfigured } from "./firebase.js";
 
 export function hotkeyToDisplay(hk) {
   if (!hk || !hk.key) return "未設定";
@@ -653,6 +654,17 @@ export function updateProjectTabs(
 export function updateAuthUI(user, syncStatus = 'synced') {
   const container = document.getElementById('authSection');
   if (!container) return;
+
+  // Firebaseが設定されていない場合
+  if (!isFirebaseConfigured()) {
+    container.innerHTML = `
+      <div style="font-size: 0.75rem; color: var(--warn); background: #fffbeb; padding: 4px 10px; border: 1px solid #fef3c7; border-radius: 8px; max-width: 200px; line-height: 1.2;">
+        ⚠️ Firebase未設定<br>
+        <span style="font-size: 0.7rem; opacity: 0.8;">デプロイ環境の設定を確認してください</span>
+      </div>
+    `;
+    return;
+  }
 
   if (user) {
     // ログイン済み

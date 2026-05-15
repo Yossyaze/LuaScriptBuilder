@@ -96,4 +96,11 @@ export async function loadUserData(userId) {
   }
 }
 
+/**
+ * Firebaseが正しく設定されているか確認
+ */
+export function isFirebaseConfigured() {
+  return !!auth;
+}
+
 export { auth, db };
