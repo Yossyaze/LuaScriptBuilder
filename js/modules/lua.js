@@ -481,5 +481,49 @@ local allSequences = {};
   lua += `\n-- 設定再読込ホットキー\nhs.hotkey.bind(${reloadModsLua}, "${reloadKeyLua}", function()\n  hs.reload()\nend)\n`;
   lua += `hs.alert.show("Hammerspoon LuaScriptBuilder Config Loaded", 2)\n`;
 
+  lua += `
+-- ==========================================
+-- LuaScriptBuilder 自動連携サーバー (CORS対応)
+-- ==========================================
+if lsbServer then
+  lsbServer:stop()
+  lsbServer = nil
+end
+
+lsbServer = hs.httpserver.new(true)
+lsbServer:setPort(27312)
+lsbServer:setCallback(function(method, path, headers, body)
+  if path == "/update" and method == "POST" then
+    local initPath = os.getenv("HOME") .. "/.hammerspoon/init.lua"
+    local f = io.open(initPath, "w")
+    if f then
+      f:write(body)
+      f:close()
+      -- ブラウザにレスポンスを返した後にリロードを走らせるため、少しディレイを置く
+      hs.timer.doAfter(0.5, function()
+        hs.alert.show("LuaScriptBuilderから直接更新されました！", 3)
+        hs.reload()
+      end)
+      return "OK", 200, {
+        ["Access-Control-Allow-Origin"] = "*",
+        ["Access-Control-Allow-Methods"] = "POST, OPTIONS",
+        ["Access-Control-Allow-Headers"] = "Content-Type"
+      }
+    else
+      return "Failed to open init.lua", 500, {["Access-Control-Allow-Origin"] = "*"}
+    end
+  elseif method == "OPTIONS" then
+    -- CORS プリフライトリクエストに対するレスポンスヘッダーの設定
+    return "", 200, {
+      ["Access-Control-Allow-Origin"] = "*",
+      ["Access-Control-Allow-Methods"] = "POST, OPTIONS",
+      ["Access-Control-Allow-Headers"] = "Content-Type"
+    }
+  end
+  return "Not Found", 404, {["Access-Control-Allow-Origin"] = "*"}
+end)
+lsbServer:start()
+`;
+
   return lua;
 }

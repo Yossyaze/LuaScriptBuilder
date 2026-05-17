@@ -830,6 +830,52 @@ document.addEventListener("DOMContentLoaded", () => {
     URL.revokeObjectURL(url);
   };
 
+  document.getElementById("btnSendToHammerspoon").onclick = async () => {
+    let out = document.getElementById("output").value;
+    
+    // まだLuaコードが生成されていない場合は、その場で自動生成する
+    if (!out) {
+      try {
+        out = generateLua();
+        document.getElementById("output").value = out;
+        setStatus("Luaを自動生成しました");
+      } catch (e) {
+        setStatus(e.message, true);
+        return;
+      }
+    }
+
+    const btn = document.getElementById("btnSendToHammerspoon");
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "送信中...";
+    setStatus("Hammerspoonへ設定を送信中...");
+
+    try {
+      // ローカルのHammerspoonサーバー（ポート27312）にPOSTリクエストを送信
+      const response = await fetch("http://localhost:27312/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain"
+        },
+        body: out
+      });
+
+      if (response.ok) {
+        setStatus("Hammerspoonの設定を直接更新し、リロードしました！");
+      } else {
+        const errText = await response.text();
+        throw new Error(errText || "サーバーエラーが発生しました");
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus("送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください", true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  };
+
   document.getElementById("btnToggleOutput").onclick = () => {
     const card = document.getElementById("outputCard");
     card.classList.toggle("hidden");
