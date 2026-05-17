@@ -100,7 +100,7 @@ function applyState(newState) {
     
     // UIコンポーネント（input/checkbox）の値も同期
     if (p.config) {
-      const fields = ["enableTimelineLog", "enableExecutionAlert", "enableLoop"];
+      const fields = ["enableTimelineLog", "enableAutoStopLog", "enableExecutionAlert", "enableLoop"];
       fields.forEach(f => {
         const el = document.getElementById(f);
         if (el) {
@@ -139,7 +139,7 @@ window.loadProjectState = function(projectId) {
 
   
   if (p.config) {
-    const fields = ["enableTimelineLog", "enableExecutionAlert", "enableLoop"];
+    const fields = ["enableTimelineLog", "enableAutoStopLog", "enableExecutionAlert", "enableLoop"];
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el) {
@@ -246,6 +246,7 @@ window.createNewProject = function(name) {
       settleIPhone: "0.4",
       waitIPhone: "1.5",
       enableTimelineLog: "true",
+      enableAutoStopLog: "true",
       enableLoop: "true",
     },
     stepIdSeq: 1,
@@ -1196,7 +1197,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // プロジェクト固有設定変更時の自動更新リスナー
-  ["enableTimelineLog", "enableExecutionAlert", "enableLoop"].forEach(id => {
+  ["enableTimelineLog", "enableAutoStopLog", "enableExecutionAlert", "enableLoop"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.onchange = () => {

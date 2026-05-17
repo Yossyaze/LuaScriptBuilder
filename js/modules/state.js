@@ -71,6 +71,7 @@ export function flushActiveProject() {
   p.templateStepIds = { ...state.templateStepIds };
   p.config = {
     enableTimelineLog: document.getElementById("enableTimelineLog").checked ? "true" : "false",
+    enableAutoStopLog: document.getElementById("enableAutoStopLog").checked ? "true" : "false",
     enableExecutionAlert: document.getElementById("enableExecutionAlert").checked ? "true" : "false",
     enableLoop: document.getElementById("enableLoop").checked ? "true" : "false",
   };

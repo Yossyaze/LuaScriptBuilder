@@ -131,7 +131,7 @@ local function createSequence(config)
           end
         end)
       else
-        stop("全ステップ終了")
+        stop("全ステップ終了", config.enableAutoStopLog)
       end
       return
     end
@@ -145,7 +145,7 @@ local function createSequence(config)
     showAlert(config, string.format("[%s] Step %d: %s", config.name, s.displayNum or 0, s.label))
 
     if s.type == "stop" then
-      stop("STOPステップ")
+      stop("STOPステップ", config.enableAutoStopLog)
       return
     elseif s.type == "jump" then
       local nextIdx = nil
@@ -319,7 +319,7 @@ local function createSequence(config)
     runStep(1)
   end
 
-  stop = function(reason)
+  stop = function(reason, saveLog)
     if not running then return end
     running = false
     if config._timer then
@@ -329,7 +329,10 @@ local function createSequence(config)
     local alertMsg = "【停止】"
     if reason then alertMsg = alertMsg .. reason end
     hs.alert.show(string.format("[%s] %s", config.name, alertMsg), 2)
-    archiveLog(config.name)
+    -- saveLogが明示的にfalseでない場合（nilやtrueを含む）にログをアーカイブ保存する
+    if saveLog ~= false then
+      archiveLog(config.name)
+    end
   end
 
   return {
@@ -348,6 +351,7 @@ local allSequences = {};
     lua += `local config_${p.id.replace(/-/g, "_")} = {\n`;
     lua += `  name = "${luaString(p.name)}",\n`;
     lua += `  enableTimelineLog = ${p.config.enableTimelineLog || "true"},\n`;
+    lua += `  enableAutoStopLog = ${p.config.enableAutoStopLog || "true"},\n`;
     lua += `  enableExecutionAlert = ${p.config.enableExecutionAlert || "false"},\n`;
     lua += `  enableLoop = ${p.config.enableLoop || "true"},\n`;
     lua += `  steps = {\n`;
@@ -464,13 +468,14 @@ local allSequences = {};
     if (p.hotkeys.stop.key && p.hotkeys.stop.key !== "") {
       const tMods = modsToLua(p.hotkeys.stop.mods);
       const tKey = luaString(p.hotkeys.stop.key);
-      lua += `hs.hotkey.bind(${tMods}, "${tKey}", function() seq_${p.id.replace(/-/g, "_")}.stop() end)\n`;
+      lua += `hs.hotkey.bind(${tMods}, "${tKey}", function() seq_${p.id.replace(/-/g, "_")}.stop("個別停止") end)\n`;
     }
   });
 
   lua += `\n-- 全プロジェクト一括停止ホットキー\n`;
   lua += `hs.hotkey.bind(${stopAllModsLua}, "${stopAllKeyLua}", function()\n`;
-  lua += `  for _, s in ipairs(allSequences) do s.stop() end\n`;
+  lua += `  -- 一括停止時はログを保存しないため、第2引数にfalseを指定する
+  for _, s in ipairs(allSequences) do s.stop("一括停止", false) end\n`;
   lua += `end)\n`;
 
   lua += `\n-- 設定再読込ホットキー\nhs.hotkey.bind(${reloadModsLua}, "${reloadKeyLua}", function()\n  hs.reload()\nend)\n`;
