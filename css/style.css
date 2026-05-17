@@ -399,11 +399,12 @@
         color: var(--warn);
       }
 
-      /* Undo/Redo Buttons */
-      #btnUndo, #btnRedo {
+      /* Undo/Redo/エクスポート/インポート ボタン（アイコンのみの表示に調整） */
+      #btnUndo, #btnRedo, #btnExport, #btnImport {
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: center;
+        padding: 6px 8px !important; /* アイコンのみなので左右のパディングをコンパクトに調整 */
       }
       
       button:disabled {
@@ -463,8 +464,8 @@
         z-index: 1000;
         background: rgba(246, 248, 250, 0.95);
         backdrop-filter: blur(8px);
-        padding: 12px 24px;
-        margin: -14px -14px 20px -14px;
+        padding: 8px 24px; /* 上下の内側余白を12pxから8pxに削減 */
+        margin: -14px -14px 12px -14px; /* 下側の外側余白を20pxから12pxに削減 */
         border-bottom: 1px solid #d7e0ea;
         display: flex;
         justify-content: space-between;
@@ -518,17 +519,18 @@
 
       .tabs-container {
         display: flex;
-        gap: 4px;
+        gap: 0px; /* 隙間を無くしてぴったり密着させる */
         overflow-x: auto;
+        overflow-y: hidden; /* 縦方向のブレや不要なスクロールバーを完全に防ぐ */
         border-bottom: 2px solid #d7e0ea;
         margin-bottom: 12px;
         padding-bottom: 0;
       }
 
       .tab {
-        padding: 8px 12px;
-        background: transparent;
-        border: 1px solid transparent;
+        padding: 8px 16px; /* 左右の余白を少し広げて押しやすく */
+        background: transparent; /* 背景は透明に戻す */
+        border: 1px solid transparent; /* 初期ボーダーは透明 */
         border-bottom: none;
         border-radius: 8px 8px 0 0;
         color: #5b6b7a;
@@ -541,8 +543,25 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         user-select: none;
+      }
+
+      /* 非アクティブタブ同士の境界に短い縦の仕切り線を表示（Chrome風） */
+      .tab:not(.active):not(:last-child)::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 25%; /* 上下中央寄せ */
+        height: 50%; /* 短めの線にするために高さを50%に制限 */
+        width: 1px;
+        background-color: #cbd5e1; /* 仕切り線の薄グレー */
+        transition: opacity 0.15s;
+      }
+
+      /* アクティブタブの左隣の仕切り線は非表示にする（Chromeと同様の挙動） */
+      .tab:has(+ .tab.active)::after {
+        opacity: 0;
       }
       
       .tab.dragging {
@@ -558,16 +577,23 @@
       }
 
       .tab:hover {
-        background: #eef4fb;
+        background: rgba(0, 0, 0, 0.04); /* ホバー時はほんのり薄暗く */
+        color: #1b2733;
+      }
+
+      /* ホバーされたタブの仕切り線と、その左隣の仕切り線も非表示にする */
+      .tab:hover::after,
+      .tab:has(+ .tab:hover)::after {
+        opacity: 0;
       }
 
       .tab.active {
         background: var(--surface);
         color: var(--accent-2);
-        border-color: #d7e0ea;
+        border: 1px solid #d7e0ea;
         border-bottom-color: var(--surface);
         font-weight: 800;
-        padding-right: 10px;
+        padding-right: 16px;
       }
 
       .tab.active::before {
@@ -747,4 +773,63 @@
       .btn-google svg {
         width: 18px;
         height: 18px;
+      }
+
+      /* トースト通知（右下ポップアップ）のスタイル設定 */
+      #status {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        color: #ffffff;
+        padding: 12px 18px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        /* 表示・非表示のアニメーション用の初期設定 */
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+        transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+      }
+
+      /* メッセージが表示された状態 */
+      #status.show {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+
+      /* 成功時のトースト（深緑ベースのプレミアムカラー） */
+      #status.ok {
+        background: rgba(15, 118, 110, 0.92); /* アクリルガラス風 */
+        border: 1px solid rgba(20, 184, 166, 0.3);
+      }
+
+      /* エラー発生時のトースト（赤ベース） */
+      #status.error {
+        background: rgba(220, 38, 38, 0.92);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+      }
+
+      /* トースト内のアイコン用設定 */
+      #status svg {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+      }
+
+      /* ヘッダー内部に配置されたプロジェクトタブ用の調整 */
+      .sticky-header .tabs-container {
+        border-bottom: none;
+        margin-bottom: -9px; /* ヘッダーのpadding-bottom（8px）とborder-bottom（1px）に密着させて結合させる */
+        padding-top: 6px;
+        width: 100%;
       }

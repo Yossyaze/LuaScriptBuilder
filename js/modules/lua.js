@@ -38,7 +38,7 @@ end
 -- ==========================================
 -- ログ保存用ユーティリティ
 -- ==========================================
-local LOG_DIR = hs.configdir .. "/logs/"
+local LOG_DIR = os.getenv("HOME") .. "/Desktop/LuaScriptBuilder/logs/"
 
 local function ensureLogDir()
   local attributes = hs.fs.attributes(LOG_DIR)
@@ -242,8 +242,58 @@ local function createSequence(config)
       hs.application.launchOrFocus(s.appName)
     elseif s.type == "key" then
       local modsStr = table.concat(s.mods or {}, ",")
-      logStep(config.enableTimelineLog, cycleCount, "KEY_PRESS", string.format("key=%s mods=[%s] focus=%s", s.key or "space", modsStr, frontAppName))
-      hs.eventtap.keyStroke(s.mods or {}, s.key or "space", 0)
+      -- アプリ名が指定されている場合：前面化（フォーカス）してからキー送信
+      if s.appName and s.appName ~= "" then
+        local app = hs.application.find(s.appName)
+        if not app then hs.application.launchOrFocus(s.appName) end
+        
+        config._timer = hs.timer.doAfter(s.settleBefore or 0.2, function()
+          if not running then return end
+          local ca = hs.application.find(s.appName)
+          if ca then
+            ca:activate()
+          end
+          
+          local currentApp = hs.application.frontmostApplication()
+          local currentAppName = currentApp and currentApp:name() or "Unknown"
+          logStep(config.enableTimelineLog, cycleCount, "KEY_PRESS", string.format("key=%s mods=[%s] focus=%s", s.key or "space", modsStr, currentAppName))
+          hs.eventtap.keyStroke(s.mods or {}, s.key or "space", 0)
+          
+          -- キー入力完了後、ステップ本来の待機時間（waitAfter）待ってから次へ
+          local wait = s.waitAfter or 0.25
+          config._timer = hs.timer.doAfter(wait, function()
+            config._timer = nil
+            if not running then return end
+            runStep(s.nextIndex)
+          end)
+        end)
+        return -- タイマーコールバック内で後続処理を行うため、ここで処理を終了する
+      else
+        -- アプリ指定がない場合：従来通り即座にキー送信
+        logStep(config.enableTimelineLog, cycleCount, "KEY_PRESS", string.format("key=%s mods=[%s] focus=%s", s.key or "space", modsStr, frontAppName))
+        hs.eventtap.keyStroke(s.mods or {}, s.key or "space", 0)
+      end
+    elseif s.type == "btt" then
+      logStep(config.enableTimelineLog, cycleCount, "BTT_TRIGGER", string.format("name=%s", s.triggerName or ""))
+      hs.osascript.applescript('tell application "BetterTouchTool" to trigger_named_async_without_response "' .. (s.triggerName or "") .. '"')
+    elseif s.type == "shortcut" then
+      logStep(config.enableTimelineLog, cycleCount, "SHORTCUT_RUN", string.format("name=%s", s.shortcutName or ""))
+      local task = hs.task.new("/usr/bin/shortcuts", function(exitCode, stdOut, stdErr)
+        if not running then return end
+        if exitCode ~= 0 then
+          logStep(config.enableTimelineLog, cycleCount, "SHORTCUT_ERROR", string.format("code=%d err=%s", exitCode, (stdErr or ""):gsub("\\\\n", " ")))
+        else
+          logStep(config.enableTimelineLog, cycleCount, "SHORTCUT_SUCCESS", "OK")
+        end
+        local wait = s.waitAfter or 0.25
+        config._timer = hs.timer.doAfter(wait, function()
+          config._timer = nil
+          if not running then return end
+          runStep(s.nextIndex)
+        end)
+      end, {"run", s.shortcutName or ""})
+      task:start()
+      return
     else
       logStep(config.enableTimelineLog, cycleCount, "KEY_UNKNOWN", string.format("type=%s key=%s focus=%s", s.type, s.key or "space", frontAppName))
       hs.eventtap.keyStroke({}, s.key or "space", 0)
@@ -369,6 +419,11 @@ local allSequences = {};
       } else if (s.kind === "key") {
         lua += `      key = "${luaString(s.key)}",\n`;
         lua += `      mods = ${modsToLua(s.mods || [])},\n`;
+        // アプリ前面化（フォーカス）用のフィールドを出力
+        if (s.appName) {
+          lua += `      appName = "${luaString(s.appName)}",\n`;
+          lua += `      settleBefore = ${s.settleBefore ?? Number(state.globalSettings.settleBeforeKey || 0.2)},\n`;
+        }
       } else if (s.kind === "click") {
         lua += `      appName = "${luaString(s.appName)}",\n`;
         lua += `      x = ${s.x},\n`;
@@ -386,6 +441,10 @@ local allSequences = {};
         lua += `      ngIndex = ${s.luaNgIndex || "nil"},\n`;
       } else if (s.kind === "jump") {
         lua += `      targetId = ${s.targetId || "nil"},\n`;
+      } else if (s.kind === "btt") {
+        lua += `      triggerName = "${luaString(s.triggerName)}",\n`;
+      } else if (s.kind === "shortcut") {
+        lua += `      shortcutName = "${luaString(s.shortcutName)}",\n`;
       }
       lua += `    },\n`;
     });

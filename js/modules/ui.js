@@ -17,8 +17,16 @@ export function keyToDisplay(key) {
   return key.toUpperCase();
 }
 
-export function defaultWaitSecondsForIndex(index) {
-  return index % 2 === 0 ? 0.3 : 0.4;
+/**
+ * ステップの種類に応じたデフォルト待機秒数（静的な基準値）を取得する
+ * @param {object} step 対象ステップ
+ * @returns {number} 待機秒数
+ */
+export function defaultWaitSecondsForStep(step) {
+  if (!step) return 0.25;
+  const kind = step.kind;
+  if (kind === "check") return 0;
+  return 0.25;
 }
 
 let stepInfoMap = new Map();
@@ -63,6 +71,8 @@ export const icons = {
   check: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
   jump: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>`,
   stop: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 9h6v6H9z"/></svg>`,
+  btt: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg>`,
+  shortcut: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
   google: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.14-4.53z" fill="#EA4335"/></svg>`,
 };
 
@@ -76,6 +86,8 @@ export function setupAddStepButtons() {
     btnFlowAddCheck: icons.check,
     btnFlowAddJump: icons.jump,
     btnFlowAddStop: icons.stop,
+    btnFlowAddBTT: icons.btt,
+    btnFlowAddShortcut: icons.shortcut,
   };
 
   Object.entries(mapping).forEach(([id, icon]) => {
@@ -104,6 +116,10 @@ function renderStepCard(step, stepNum, isLast = false) {
     icon = icons.jump;
   } else if (step.kind === "stop") {
     icon = icons.stop;
+  } else if (step.kind === "btt") {
+    icon = icons.btt;
+  } else if (step.kind === "shortcut") {
+    icon = icons.shortcut;
   }
 
   let displayContent = "";
@@ -209,16 +225,59 @@ function renderStepCard(step, stepNum, isLast = false) {
       </div>
     `;
     editorContent = "";
-  } else {
+  } else if (step.kind === "btt") {
     displayContent = `
       <div class="step-key-label-group">
-        <span class="step-key-label">入力キー:</span>
-        <span class="step-key-badge">${hotkeyToDisplay(step)}</span>
+        <span class="step-key-label" style="min-width: 80px;">トリガー名:</span>
+        <input type="text" class="step-input" style="flex:1;" data-field="triggerName" data-step-id="${step.id}" value="${escapeHtml(step.triggerName || "")}" placeholder="BTTで設定した名前" />
       </div>
     `;
-    editorContent = `<button type="button" class="record-btn btn-small${state.recordingStepId === step.id ? " recording" : ""}" data-action="record-step" data-step-id="${step.id}">
-         ${state.recordingStepId === step.id ? "入力待ち..." : "記録"}
-       </button>`;
+    editorContent = "";
+  } else if (step.kind === "shortcut") {
+    displayContent = `
+      <div class="step-key-label-group">
+        <span class="step-key-label" style="min-width: 90px;">ショートカット名:</span>
+        <input type="text" class="step-input" style="flex:1;" data-field="shortcutName" data-step-id="${step.id}" value="${escapeHtml(step.shortcutName || "")}" placeholder="ショートカットの名称" />
+      </div>
+    `;
+    editorContent = "";
+  } else {
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div class="step-key-label-group" style="justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
+            <span class="step-key-label" style="min-width: 60px;">入力キー:</span>
+            <span class="step-key-badge" style="flex-shrink: 0;">${hotkeyToDisplay(step)}</span>
+            
+            <!-- アプリ名が入力されている場合のみ、1行目（入力キーの右隣）に十分なサイズで待機時間を表示する -->
+            ${step.appName ? `
+            <div style="display:flex; align-items:center; gap:2px; margin-left:6px; flex-shrink:0;">
+              <span class="step-key-label" title="前面に出るのを待つ時間">待機:</span>
+              <input type="number" class="step-input" style="width: 60px;" data-field="settleBefore" data-step-id="${step.id}" value="${step.settleBefore}" step="0.1" min="0" />
+              <span class="step-key-label">s</span>
+            </div>
+            ` : ''}
+          </div>
+          <!-- 記録ボタンを1行目の右側に配置して高さを揃え、絶対に縦書きにならないように保護する -->
+          <button type="button" class="record-btn btn-small${state.recordingStepId === step.id ? " recording" : ""}" data-action="record-step" data-step-id="${step.id}" style="white-space: nowrap; flex-shrink: 0; margin-left: 8px;">
+            ${state.recordingStepId === step.id ? "入力待ち..." : "記録"}
+          </button>
+        </div>
+        <!-- アプリ前面化（フォーカス）用のUIを追加 -->
+        <div class="step-key-label-group">
+          <input type="text" class="step-input" style="flex:1; min-width: 0;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (入力前にフォーカス・任意)" />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+            </div>
+          </div>
+          <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+        </div>
+      </div>
+    `;
+    editorContent = ""; // 右側のカラムは空にして、カードの横幅を広く使えるようにする
   }
 
   const badgeLabel =
@@ -236,7 +295,11 @@ function renderStepCard(step, stepNum, isLast = false) {
               ? "JUMP"
               : step.kind === "stop"
                 ? "STOP"
-                : "KEY";
+                : step.kind === "btt"
+                  ? "BTT"
+                  : step.kind === "shortcut"
+                    ? "SHORTCUT"
+                    : "KEY";
 
   const kindClass =
     step.kind === "move"
@@ -253,7 +316,11 @@ function renderStepCard(step, stepNum, isLast = false) {
               ? "jump"
               : step.kind === "stop"
                 ? "stop"
-                : "key";
+                : step.kind === "btt"
+                  ? "btt"
+                  : step.kind === "shortcut"
+                    ? "shortcut"
+                    : "key";
 
   return `
     <article class="flow-step ${kindClass}${state.selectedStepId === step.id ? " selected" : ""}${isLast ? " is-last" : ""}" draggable="true" data-step-id="${step.id}">
@@ -321,7 +388,7 @@ function renderFlowStepsRecursive(
 
     // JUMPステップの場合、ここで待機コネクタとジャンプ先ラベルを追加して終了
     if (step.kind === "jump") {
-      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForIndex(index);
+      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
       const targetDesc = getStepLabelById(step.targetId) || "未設定";
       nodes.push(`
         <div class="flow-jump-group">
@@ -440,7 +507,7 @@ function renderFlowStepsRecursive(
       if (isTopLevel && isLoopEnabled) {
         // 末尾の合流ラベル（check）の場合は、直後の待機ピルを表示しない
         if (step.kind !== "check") {
-          const waitSeconds = step.waitAfter ?? defaultWaitSecondsForIndex(index);
+          const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
           nodes.push(`
             <div class="flow-connector" data-insert-after="${step.id}">
               <div class="flow-connector-pill">
@@ -475,7 +542,7 @@ function renderFlowStepsRecursive(
     }
 
     if (!isStopStep && (hasNext || !isTopLevel) && step.kind !== "check") {
-      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForIndex(index);
+      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
       nodes.push(`
         <div class="flow-connector" data-insert-after="${step.id}">
           <div class="flow-connector-pill">
@@ -712,10 +779,33 @@ export function updateAuthUI(user, syncStatus = state.sync.status) {
   }
 }
 
+let statusTimeout = null;
+
+/**
+ * 操作メッセージを左下のトースト通知（ポップアップ）として表示する
+ * @param {string} msg 表示するメッセージ
+ * @param {boolean} isError エラー表示かどうか
+ */
 export function setStatus(msg, isError = false) {
   const el = document.getElementById("status");
   if (!el) return;
-  el.textContent = msg;
-  el.className = isError ? "error" : "ok";
+
+  // 実行中のタイマーがあればクリアする
+  if (statusTimeout) {
+    clearTimeout(statusTimeout);
+  }
+
+  // エラーか成功かに応じた美しい Feather/Lucide スタイルの SVG アイコンを生成
+  const icon = isError
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+
+  el.innerHTML = `${icon}<span>${escapeHtml(msg)}</span>`;
+  el.className = isError ? "error show" : "ok show";
+
+  // 3秒後にトーストをフェードアウトして非表示にする
+  statusTimeout = setTimeout(() => {
+    el.classList.remove("show");
+  }, 3000);
 }
 

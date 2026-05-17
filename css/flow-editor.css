@@ -31,6 +31,14 @@
   --clr-stop-bg: #fef2f2;
   --clr-stop-ink: #991b1b;
   --clr-stop-line: #fecaca;
+  /* BTT Action */
+  --clr-btt-bg: #fff7ed;
+  --clr-btt-ink: #c2410c;
+  --clr-btt-line: #ffedd5;
+  /* Shortcut Action */
+  --clr-shortcut-bg: #f8fafc;
+  --clr-shortcut-ink: #334155;
+  --clr-shortcut-line: #e2e8f0;
 }
 
 .flow {
@@ -300,6 +308,8 @@
 .flow-kind-focus { background: var(--clr-focus-bg); color: var(--clr-focus-ink); }
 .flow-kind-jump { background: var(--clr-jump-bg); color: var(--clr-jump-ink); }
 .flow-kind-stop { background: var(--clr-stop-bg); color: var(--clr-stop-ink); }
+.flow-kind-btt { background: var(--clr-btt-bg); color: var(--clr-btt-ink); }
+.flow-kind-shortcut { background: var(--clr-shortcut-bg); color: var(--clr-shortcut-ink); }
 .flow-kind-wait { background: #fff5db; color: #8e5a00; }
 .flow-kind-label { background: #f5f3ff; color: #5b21b6; }
 
@@ -465,6 +475,8 @@
 #btnFlowAddCheck { background: var(--clr-check-bg); color: var(--clr-check-ink); border: 1px solid var(--clr-check-line); }
 #btnFlowAddJump { background: var(--clr-jump-bg); color: var(--clr-jump-ink); border: 1px solid var(--clr-jump-line); }
 #btnFlowAddStop { background: var(--clr-stop-bg); color: var(--clr-stop-ink); border: 1px solid var(--clr-stop-line); }
+#btnFlowAddBTT { background: var(--clr-btt-bg); color: var(--clr-btt-ink); border: 1px solid var(--clr-btt-line); }
+#btnFlowAddShortcut { background: var(--clr-shortcut-bg); color: var(--clr-shortcut-ink); border: 1px solid var(--clr-shortcut-line); }
 
 
 

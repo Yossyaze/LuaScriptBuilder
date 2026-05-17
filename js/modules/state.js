@@ -11,6 +11,16 @@ export const state = {
     ipadMove: { key: "a", mods: ["ctrl", "shift"] },
     iphoneMove: { key: "z", mods: ["ctrl", "shift"] },
     stopAllHotkey: { key: "q", mods: ["ctrl", "shift"] },
+    // 待機時間グローバル設定
+    settleIPad: "1.00",
+    settleIPhone: "1.00",
+    waitKey: "0.25",
+    settleBeforeKey: "0.20", // キー送信時のフォーカス待機時間のグローバルデフォルト
+    waitClick: "0.25",
+    waitFocus: "0.25",
+    waitCheck: "0.25",
+    waitBtt: "0.25",
+    waitShortcut: "0.25",
   },
   recordingTarget: null,
   recordingStepId: null,
@@ -60,10 +70,6 @@ export function flushActiveProject() {
   p.stepIdSeq = state.stepIdSeq;
   p.templateStepIds = { ...state.templateStepIds };
   p.config = {
-    settleIPad: document.getElementById("settleIPad").value,
-    waitIPad: document.getElementById("waitIPad").value,
-    settleIPhone: document.getElementById("settleIPhone").value,
-    waitIPhone: document.getElementById("waitIPhone").value,
     enableTimelineLog: document.getElementById("enableTimelineLog").checked ? "true" : "false",
     enableExecutionAlert: document.getElementById("enableExecutionAlert").checked ? "true" : "false",
     enableLoop: document.getElementById("enableLoop").checked ? "true" : "false",
@@ -80,6 +86,8 @@ export function defaultTitleByKind(kind, moveHotkey) {
   if (kind === "check") return "画面テキスト確認";
   if (kind === "stop") return "実行停止";
   if (kind === "jump") return "ジャンプ";
+  if (kind === "btt") return "BTTトリガー";
+  if (kind === "shortcut") return "ショートカット実行";
   return "キー送信";
 }
 
@@ -169,14 +177,22 @@ export function normalizeStep(step) {
     s.targetId = step.targetId ? Number(step.targetId) : null;
   } else if (s.kind === "stop") {
     // No extra fields
+  } else if (s.kind === "btt") {
+    s.triggerName = (step.triggerName || "").trim();
+  } else if (s.kind === "shortcut") {
+    s.shortcutName = (step.shortcutName || "").trim();
   } else {
     s.kind = "key";
     s.key = (step.key || "space").trim().toLowerCase() || "space";
     s.mods = Array.isArray(step.mods) ? step.mods : [];
+    // アプリ前面化（フォーカス）機能用のフィールドを追加
+    s.appName = step.appName !== undefined ? (step.appName || "").trim() : "";
+    s.settleBefore = Number.isFinite(Number(step.settleBefore)) ? Number(step.settleBefore) : 0.2;
   }
   
-  // CHECKステップの場合は合流後の待機をデフォルト0にする
+  // 各ステップのデフォルト待機秒数を静的なフォールバックで定義する（共通設定変更による既存ステップの意図しない上書きを防ぐため）
   const defaultWait = s.kind === "check" ? 0 : 0.25;
+
   s.waitAfter = normalizeWaitAfter(step.waitAfter, defaultWait);
   return s;
 }

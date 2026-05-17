@@ -100,7 +100,7 @@ function applyState(newState) {
     
     // UIコンポーネント（input/checkbox）の値も同期
     if (p.config) {
-      const fields = ["settleIPad", "waitIPad", "settleIPhone", "waitIPhone", "enableTimelineLog", "enableLoop"];
+      const fields = ["enableTimelineLog", "enableExecutionAlert", "enableLoop"];
       fields.forEach(f => {
         const el = document.getElementById(f);
         if (el) {
@@ -112,6 +112,7 @@ function applyState(newState) {
         }
       });
     }
+    syncGlobalSettingsToUI();
   }
   
   updateProjectTabs();
@@ -138,7 +139,7 @@ window.loadProjectState = function(projectId) {
 
   
   if (p.config) {
-    const fields = ["settleIPad", "waitIPad", "settleIPhone", "waitIPhone", "enableTimelineLog", "enableLoop"];
+    const fields = ["enableTimelineLog", "enableExecutionAlert", "enableLoop"];
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el) {
@@ -150,6 +151,7 @@ window.loadProjectState = function(projectId) {
       }
     });
   }
+  syncGlobalSettingsToUI();
   
   updateProjectTabs();
   renderHotkeys();
@@ -367,7 +369,18 @@ function addStep(kind, moveHotkey = "ipadMove") {
     id: nextStepId(),
     kind,
     moveHotkey,
-    waitAfter: (kind === "move") ? (moveHotkey === "ipadMove" ? num("settleIPad", 0.3) : num("settleIPhone", 0.4)) : 0.25
+    waitAfter: (() => {
+      if (kind === "move") {
+        return Number(state.globalSettings[moveHotkey === "ipadMove" ? "settleIPad" : "settleIPhone"] || 1.0);
+      }
+      if (kind === "key") return Number(state.globalSettings.waitKey || 0.25);
+      if (kind === "click") return Number(state.globalSettings.waitClick || 0.25);
+      if (kind === "focus") return Number(state.globalSettings.waitFocus || 0.25);
+      if (kind === "check") return Number(state.globalSettings.waitCheck || 0.25);
+      if (kind === "btt") return Number(state.globalSettings.waitBtt || 0.25);
+      if (kind === "shortcut") return Number(state.globalSettings.waitShortcut || 0.25);
+      return 0.25;
+    })()
   });
 
   if (state.selectedBranch) {
@@ -648,7 +661,21 @@ function captureHotkey(e) {
 
 // --- Initialization ---
 
+// グローバル設定のUI同期関数
+window.syncGlobalSettingsToUI = function() {
+  const globalWaitFields = ["settleIPad", "settleIPhone", "waitKey", "settleBeforeKey", "waitClick", "waitFocus", "waitCheck", "waitBtt", "waitShortcut"];
+  globalWaitFields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && state.globalSettings[id] !== undefined) {
+      el.value = state.globalSettings[id];
+    }
+  });
+};
+
 document.addEventListener("DOMContentLoaded", () => {
+  // アプリ起動時のグローバル設定同期
+  syncGlobalSettingsToUI();
+
   try {
     mermaid.initialize({
       startOnLoad: false,
@@ -853,22 +880,101 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnFlowAddCheck").onclick = () => addStep("check");
   document.getElementById("btnFlowAddJump").onclick = () => addStep("jump");
   document.getElementById("btnFlowAddStop").onclick = () => addStep("stop");
+  document.getElementById("btnFlowAddBTT").onclick = () => addStep("btt");
+  document.getElementById("btnFlowAddShortcut").onclick = () => addStep("shortcut");
 
   document.getElementById("btnApplyAllWait").onclick = () => {
-    if (!confirm("現在の全ステップの待機時間を、上記の設定値で一斉に上書きしますか？")) return;
+    if (!confirm("現在の全ステップの待機時間を、上記の設定値で一斉に上書きしますか？\n（画面確認内のブランチ処理も含みます）")) return;
 
     saveHistory();
-    state.flowSteps.forEach((step, index) => {
-      if (step.kind === "move") {
-        step.waitAfter = step.moveHotkey === "ipadMove" ? num("settleIPad", 0.3) : num("settleIPhone", 0.4);
-      } else if (step.kind === "key") {
-        step.waitAfter = step.moveHotkey === "ipadMove" ? num("waitIPad", 2.0) : num("waitIPhone", 1.5);
-      } else {
-        step.waitAfter = 0.25;
-      }
-    });
+
+    const applyWaitToSteps = (steps) => {
+      steps.forEach((step) => {
+        const kind = step.kind;
+        if (kind === "move") {
+          step.waitAfter = Number(state.globalSettings[step.moveHotkey === "ipadMove" ? "settleIPad" : "settleIPhone"] || 1.0);
+        } else if (kind === "key") {
+          step.waitAfter = Number(state.globalSettings.waitKey || 0.25);
+          // キー入力ステップ内にアプリ前面化（フォーカス）が指定されている場合、その待機時間も上書き適用する
+          if (step.appName && step.appName !== "") {
+            step.settleBefore = Number(state.globalSettings.settleBeforeKey || 0.20);
+          }
+        } else if (kind === "click") {
+          step.waitAfter = Number(state.globalSettings.waitClick || 0.25);
+        } else if (kind === "focus") {
+          step.waitAfter = Number(state.globalSettings.waitFocus || 0.25);
+        } else if (kind === "check") {
+          step.waitAfter = Number(state.globalSettings.waitCheck || 0.25);
+          if (step.okBranch) applyWaitToSteps(step.okBranch);
+          if (step.ngBranch) applyWaitToSteps(step.ngBranch);
+        } else if (kind === "btt") {
+          step.waitAfter = Number(state.globalSettings.waitBtt || 0.25);
+        } else if (kind === "shortcut") {
+          step.waitAfter = Number(state.globalSettings.waitShortcut || 0.25);
+        } else {
+          step.waitAfter = 0.25;
+        }
+      });
+    };
+
+    applyWaitToSteps(state.flowSteps);
     refreshFlowViews();
   };
+
+  // 個別の共通待機秒数の一斉適用ボタンのイベントハンドラー
+  document.querySelectorAll(".apply-single-wait-btn").forEach((btn) => {
+    btn.onclick = () => {
+      const target = btn.dataset.target;
+      let label = "";
+      if (target === "settleIPad") label = "iPad切り替え後待機秒";
+      else if (target === "settleIPhone") label = "iPhone切り替え後待機秒";
+      else if (target === "waitKey") label = "キー入力後待機秒";
+      else if (target === "settleBeforeKey") label = "キー送信内フォーカス後待機秒";
+      else if (target === "waitClick") label = "座標クリック後待機秒";
+      else if (target === "waitFocus") label = "アプリ前面フォーカス後待機秒";
+      else if (target === "waitCheck") label = "画面テキスト確認後待機秒";
+      else if (target === "waitBtt") label = "BTTトリガー実行後待機秒";
+      else if (target === "waitShortcut") label = "ショートカット実行後待機秒";
+
+      if (!confirm(`現在の全ステップのうち、対象アクションの待機時間を「${label}」の値で一斉に上書きしますか？\n（画面確認内のブランチ処理も含みます）`)) return;
+
+      saveHistory();
+
+      const applyWaitToSteps = (steps) => {
+        steps.forEach((step) => {
+          const kind = step.kind;
+          if (target === "settleIPad" && kind === "move" && step.moveHotkey === "ipadMove") {
+            step.waitAfter = Number(state.globalSettings.settleIPad || 1.0);
+          } else if (target === "settleIPhone" && kind === "move" && step.moveHotkey === "iphoneMove") {
+            step.waitAfter = Number(state.globalSettings.settleIPhone || 1.0);
+          } else if (target === "waitKey" && kind === "key") {
+            step.waitAfter = Number(state.globalSettings.waitKey || 0.25);
+          } else if (target === "settleBeforeKey" && kind === "key" && step.appName && step.appName !== "") {
+            step.settleBefore = Number(state.globalSettings.settleBeforeKey || 0.20);
+          } else if (target === "waitClick" && kind === "click") {
+            step.waitAfter = Number(state.globalSettings.waitClick || 0.25);
+          } else if (target === "waitFocus" && kind === "focus") {
+            step.waitAfter = Number(state.globalSettings.waitFocus || 0.25);
+          } else if (target === "waitCheck" && kind === "check") {
+            step.waitAfter = Number(state.globalSettings.waitCheck || 0.25);
+          } else if (target === "waitBtt" && kind === "btt") {
+            step.waitAfter = Number(state.globalSettings.waitBtt || 0.25);
+          } else if (target === "waitShortcut" && kind === "shortcut") {
+            step.waitAfter = Number(state.globalSettings.waitShortcut || 0.25);
+          }
+
+          // 再帰的に画面確認（check）の okBranch, ngBranch も処理する
+          if (kind === "check") {
+            if (step.okBranch) applyWaitToSteps(step.okBranch);
+            if (step.ngBranch) applyWaitToSteps(step.ngBranch);
+          }
+        });
+      };
+
+      applyWaitToSteps(state.flowSteps);
+      refreshFlowViews();
+    };
+  });
 
   // Tab switching
   document.getElementById("tabList").onclick = () => {
@@ -1076,8 +1182,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   });
 
-  // 設定変更時の自動更新リスナー
-  ["settleIPad", "waitIPad", "settleIPhone", "waitIPhone", "enableTimelineLog", "enableLoop"].forEach(id => {
+  // グローバル待機設定変更時の自動更新リスナー
+  const globalWaitFields = ["settleIPad", "settleIPhone", "waitKey", "settleBeforeKey", "waitClick", "waitFocus", "waitCheck", "waitBtt", "waitShortcut"];
+  globalWaitFields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.onchange = () => {
+        saveHistory();
+        state.globalSettings[id] = el.value;
+        refreshFlowViews();
+      };
+    }
+  });
+
+  // プロジェクト固有設定変更時の自動更新リスナー
+  ["enableTimelineLog", "enableExecutionAlert", "enableLoop"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.onchange = () => {
