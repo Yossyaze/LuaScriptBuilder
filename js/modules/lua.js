@@ -215,12 +215,15 @@ local function createSequence(config)
       hs.eventtap.keyStroke(s.mods or {}, s.key, 0)
     elseif s.type == "click" then
       local app = hs.application.find(s.appName)
-      if not app then hs.application.launchOrFocus(s.appName) end
+      if app then
+        app:activate()
+      else
+        hs.application.launchOrFocus(s.appName)
+      end
       config._timer = hs.timer.doAfter(s.settleBefore or 0.5, function()
         if not running then return end
         local ca = hs.application.find(s.appName)
         if ca then
-          ca:activate()
           local win = ca:mainWindow()
           if win then
             local f = win:frame()
@@ -245,14 +248,14 @@ local function createSequence(config)
       -- アプリ名が指定されている場合：前面化（フォーカス）してからキー送信
       if s.appName and s.appName ~= "" then
         local app = hs.application.find(s.appName)
-        if not app then hs.application.launchOrFocus(s.appName) end
+        if app then
+          app:activate()
+        else
+          hs.application.launchOrFocus(s.appName)
+        end
         
         config._timer = hs.timer.doAfter(s.settleBefore or 0.2, function()
           if not running then return end
-          local ca = hs.application.find(s.appName)
-          if ca then
-            ca:activate()
-          end
           
           local currentApp = hs.application.frontmostApplication()
           local currentAppName = currentApp and currentApp:name() or "Unknown"
