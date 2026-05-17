@@ -9,3 +9,6 @@ dist/
 .firebase/
 .agents/
 skills-lock.json
+
+# 実行ログフォルダの除外（将来的な自動コミット防止）
+logs/
