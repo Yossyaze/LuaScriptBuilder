@@ -516,7 +516,7 @@ function renderFlowStepsRecursive(
             </div>
           </div>
           <div class="flow-merge${mergeClass}${isMergeSelected ? " selected" : ""}">
-            <span class="flow-merge-pill${isMergeSelected ? " selected" : ""}" data-rendered-from="merge" data-action="select-merge" data-parent-id="${step.id}" data-insert-at="end" data-branch-type="ok_ng_merge">↓ メインフローに合流</span>
+            <span class="flow-merge-pill${isMergeSelected ? " selected" : ""}" data-rendered-from="merge" data-action="select-merge" data-parent-id="${step.id}" data-insert-at="end" data-branch-type="ok_ng_merge">↓ 合流</span>
           </div>
         </div>
       `);
