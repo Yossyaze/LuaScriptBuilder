@@ -490,7 +490,7 @@ if lsbServer then
   lsbServer = nil
 end
 
-lsbServer = hs.httpserver.new(true)
+lsbServer = hs.httpserver.new()
 lsbServer:setPort(27312)
 lsbServer:setCallback(function(method, path, headers, body)
   if path == "/update" and method == "POST" then

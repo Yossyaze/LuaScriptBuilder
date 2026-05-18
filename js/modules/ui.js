@@ -44,6 +44,22 @@ export function getAllStepsFlat(steps) {
   return res;
 }
 
+/**
+ * ブランチ内のCHECKのネスト深度から必要なグリッドカラム数を計算する。
+ * CHECKがないブランチ = 1カラム、CHECKがあるブランチ = ok側カラム + ng側カラム
+ */
+function calcBranchWidth(steps) {
+  let maxWidth = 1;
+  for (const step of (steps || [])) {
+    if (step.kind === "check") {
+      const okW = calcBranchWidth(step.okBranch || []);
+      const ngW = calcBranchWidth(step.ngBranch || []);
+      maxWidth = Math.max(maxWidth, okW + ngW);
+    }
+  }
+  return maxWidth;
+}
+
 function prepareStepMetadata() {
   const flat = getAllStepsFlat(state.flowSteps);
   stepInfoMap.clear();
@@ -466,13 +482,19 @@ function renderFlowStepsRecursive(
         state.selectedBranch.branchType === "ng";
 
       const isMergeSelected = state.selectedMergeId === step.id;
+
+      // ネスト分岐のカラム幅を計算
+      const okWidth = calcBranchWidth(step.okBranch || []);
+      const ngWidth = calcBranchWidth(step.ngBranch || []);
+      const totalCols = okWidth + ngWidth;
+
       nodes.push(`
-        <div class="flow-check-block${mergeClass}">
+        <div class="flow-check-block${mergeClass}" style="--ok-cols: ${okWidth}; --total-cols: ${totalCols}">
           <div class="flow-check-card">
             ${stepCardHtml}
           </div>
-          <div class="flow-split" data-parent-check-id="${step.id}">
-            <div class="flow-split-col ok${okSelected ? " selected" : ""}${okEndsStop ? " ends-stop" : ""}" data-branch-type="ok" data-parent-id="${step.id}">
+          <div class="flow-split" style="--ok-cols: ${okWidth}; --total-cols: ${totalCols}" data-parent-check-id="${step.id}">
+            <div class="flow-split-col ok${okSelected ? " selected" : ""}${okEndsStop ? " ends-stop" : ""}" style="grid-column: 1 / ${okWidth + 1}" data-branch-type="ok" data-parent-id="${step.id}">
               <div class="flow-split-header${okSelected && state.selectedBranch.selectionType === "header" ? " selected" : ""}" data-branch-type="ok" data-parent-id="${step.id}">✅ OK (見つかった時)</div>
               ${okBeforeConnector}
               ${okHtml || `<div class="flow-split-empty${okSelected && state.selectedBranch.selectionType === "empty" ? " selected" : ""}" data-branch-type="ok" data-parent-id="${step.id}">
@@ -482,7 +504,7 @@ function renderFlowStepsRecursive(
               </div>`}
               ${okEndsStop ? "" : `<div class="flow-branch-filler"></div>`}
             </div>
-            <div class="flow-split-col ng${ngSelected ? " selected" : ""}${ngEndsStop ? " ends-stop" : ""}" data-branch-type="ng" data-parent-id="${step.id}">
+            <div class="flow-split-col ng${ngSelected ? " selected" : ""}${ngEndsStop ? " ends-stop" : ""}" style="grid-column: ${okWidth + 1} / ${totalCols + 1}" data-branch-type="ng" data-parent-id="${step.id}">
               <div class="flow-split-header${ngSelected && state.selectedBranch.selectionType === "header" ? " selected" : ""}" data-branch-type="ng" data-parent-id="${step.id}">❌ NG (見つからない時)</div>
               ${ngBeforeConnector}
               ${ngHtml || `<div class="flow-split-empty${ngSelected && state.selectedBranch.selectionType === "empty" ? " selected" : ""}" data-branch-type="ng" data-parent-id="${step.id}">

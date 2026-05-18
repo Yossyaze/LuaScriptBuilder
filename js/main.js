@@ -853,7 +853,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       // ローカルのHammerspoonサーバー（ポート27312）にPOSTリクエストを送信
-      const response = await fetch("http://localhost:27312/update", {
+      const response = await fetch("http://127.0.0.1:27312/update", {
         method: "POST",
         headers: {
           "Content-Type": "text/plain"

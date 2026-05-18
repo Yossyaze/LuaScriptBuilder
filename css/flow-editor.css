@@ -50,7 +50,7 @@
 
 .flow-track {
   display: grid;
-  grid-template-columns: repeat(2, 350px); /* カード幅に合わせる */
+  grid-template-columns: repeat(2, 350px); /* トップレベルのカード幅 */
   column-gap: var(--flow-branch-gap);
   row-gap: 20px;
   position: relative;
@@ -105,6 +105,7 @@
   gap: 6px;
   position: relative;
   width: 100%;
+  min-width: 0; /* オーバーフロー防止 */
   box-sizing: border-box;
   cursor: grab;
 }
@@ -481,10 +482,11 @@
 
 
 /* ========== CHECK ブロック（分割と合流の親コンテナ） ========== */
+/* --total-cols はJSで動的にセットされる（デフォルト2） */
 .flow-check-block {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(2, 350px);
+  grid-template-columns: repeat(var(--total-cols, 2), 350px);
   column-gap: var(--flow-branch-gap);
   width: fit-content;
 }
@@ -510,7 +512,7 @@
   position: relative;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(2, 350px);
+  grid-template-columns: repeat(var(--total-cols, 2), 350px);
   column-gap: var(--flow-branch-gap);
   row-gap: 0;
   padding-top: var(--flow-branch-drop);
@@ -534,7 +536,18 @@
   position: relative;
   padding: 0 8px 8px;
   margin: 0;
+  min-width: 0; /* グリッドオーバーフロー防止 */
 }
+
+/* ネスト分岐で親カラムが広がっても、カード類は350px幅に留める */
+.flow-split-col > .flow-split-header,
+.flow-split-col > .flow-connector,
+.flow-split-col > .flow-step,
+.flow-split-col > .flow-split-empty,
+.flow-split-col > .flow-branch-filler {
+  max-width: 350px;
+}
+/* flow-check-block は全幅展開を許可（ネスト分岐のために必要） */
 
 .flow-split-col.ng::before {
   display: none;
@@ -642,7 +655,7 @@
 .flow-merge-pill {
   position: absolute;
   top: 50%;
-  left: var(--flow-ok-line-x);
+  left: 175px; /* カラム1の中央 = 350px / 2 */
   transform: translate(-50%, -50%);
   display: inline-flex;
   align-items: center;

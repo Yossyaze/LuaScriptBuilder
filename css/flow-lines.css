@@ -114,6 +114,11 @@
   left: 50%;
 }
 
+/* =====================================================
+   分岐（CHECK）の接続線
+   --ok-cols カスタムプロパティで動的にNG位置を計算する
+   ===================================================== */
+
 /* 分岐（CHECK）のサイド分岐ライン: カード中央から右へ */
 .flow-check-card::after {
   content: "";
@@ -121,7 +126,8 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: calc(100% + var(--flow-branch-gap));
+  /* --ok-cols カラム分の距離を横に伸ばす (350px + gap) × okCols */
+  width: calc(var(--ok-cols, 1) * (100% + var(--flow-branch-gap)));
   height: 2px;
   background: var(--line);
   z-index: -1;
@@ -135,23 +141,26 @@
   display: block;
   position: absolute;
   top: 50%;
-  left: calc(150% + var(--flow-branch-gap));
+  /* NGカラムの中心 = okCols × (100% + gap) + 50% */
+  left: calc(var(--ok-cols, 1) * (100% + var(--flow-branch-gap)) + 50%);
   width: 2px;
-  bottom: -80px; /* NGカラムに届くのに十分な長さ（重なりは無視される） */
+  bottom: -80px; /* NGカラムに届くのに十分な長さ */
   background: var(--line);
   z-index: -1;
   transform: translateX(-50%);
   pointer-events: none;
 }
 
-/* 合流（MERGE）の横線: ピル中央へサイドから接続 */
+/* 合流（MERGE）の横線: OK軸中央からNG軸中央へ */
 .flow-merge::before {
   content: "";
   display: block;
   position: absolute;
   top: 50%;
-  left: var(--flow-ok-line-x);
-  width: calc(var(--flow-ng-line-x) - var(--flow-ok-line-x));
+  /* OK軸 = カラム1の中央 = 175px */
+  left: 175px;
+  /* OK中央からNG中央まで = okCols × (350px + gap) */
+  width: calc(var(--ok-cols, 1) * (350px + var(--flow-branch-gap)));
   height: 2px;
   background: var(--line);
   transform: translateY(-50%);
@@ -159,14 +168,14 @@
   pointer-events: none;
 }
 
-/* 合流（MERGE）の垂直線: メイン軸を貫通 (上下の隙間を埋める) */
+/* 合流（MERGE）の垂直線: OK軸（カラム1中央）を貫通 */
 .flow-merge::after {
   content: "";
   display: block;
   position: absolute;
   top: -33px; /* 上の要素(Padding等)をカバー */
   bottom: -33px; /* 下の要素への接続を確実にする */
-  left: var(--flow-ok-line-x);
+  left: 175px; /* カラム1の中央 */
   width: 2px;
   background: var(--line);
   z-index: -1;
