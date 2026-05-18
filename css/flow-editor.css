@@ -534,7 +534,7 @@
   align-items: stretch;
   gap: 8px;
   position: relative;
-  padding: 0 8px 8px;
+  padding: 0 0 8px; /* 左右パディングは不要（column-gapで確保）、縦線軸をズラさないため */
   margin: 0;
   min-width: 0; /* グリッドオーバーフロー防止 */
 }
