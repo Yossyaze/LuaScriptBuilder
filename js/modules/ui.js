@@ -26,6 +26,7 @@ export function defaultWaitSecondsForStep(step) {
   if (!step) return 0.25;
   const kind = step.kind;
   if (kind === "check") return 0;
+  if (kind === "device_switch") return 1.0;
   return 0.25;
 }
 
@@ -81,6 +82,7 @@ export function getStepLabelById(id) {
 export const icons = {
   ipad: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><line x1="12" x2="12" y1="18" y2="18"/></svg>`,
   iphone: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="10" height="18" x="7" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="17" y2="17"/></svg>`,
+  device_switch: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17h16"/><path d="m16 20 4-4-4-4"/><path d="M20 7H4"/><path d="m8 3-4 4 4 4"/></svg>`,
   key: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>`,
   click: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
   focus: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-3-3-3 3"/><path d="m15 18-3-3-3 3"/><path d="M12 3v6"/></svg>`,
@@ -96,6 +98,7 @@ export function setupAddStepButtons() {
   const mapping = {
     btnFlowAddIPad: icons.ipad,
     btnFlowAddIPhone: icons.iphone,
+    btnFlowAddDeviceSwitch: icons.device_switch,
     btnFlowAddKey: icons.key,
     btnFlowAddClick: icons.click,
     btnFlowAddFocus: icons.focus,
@@ -122,6 +125,8 @@ function renderStepCard(step, stepNum, isLast = false) {
   let icon = icons.key;
   if (step.kind === "move") {
     icon = step.moveHotkey === "ipadMove" ? icons.ipad : icons.iphone;
+  } else if (step.kind === "device_switch") {
+    icon = icons.device_switch;
   } else if (step.kind === "click") {
     icon = icons.click;
   } else if (step.kind === "focus") {
@@ -257,6 +262,39 @@ function renderStepCard(step, stepNum, isLast = false) {
       </div>
     `;
     editorContent = "";
+  } else if (step.kind === "device_switch") {
+    const devName = step.deviceName || "";
+    const isFav = window.isFavoriteDevice ? window.isFavoriteDevice(devName) : false;
+    const favList = window.getFavoriteDevices ? window.getFavoriteDevices() : [];
+    
+    // オプション生成 (初期状態は常に「お気に入りから選ぶ...」が選択される)
+    let optionsHtml = '<option value="" selected>お気に入りから選ぶ...</option>';
+    favList.forEach(fav => {
+      optionsHtml += `<option value="${escapeHtml(fav)}">${escapeHtml(fav)}</option>`;
+    });
+
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <!-- 1行目: 入力欄とトグルボタン -->
+        <div class="step-key-label-group" style="align-items: center; gap: 4px;">
+          <span class="step-key-label" style="min-width: 80px; flex-shrink: 0;">切替先名:</span>
+          <div style="display: flex; gap: 4px; flex: 1; align-items: center; min-width: 0;">
+            <input type="text" class="step-input" style="flex: 1; min-width: 0;" data-field="deviceName" data-step-id="${step.id}" value="${escapeHtml(devName)}" placeholder="デバイス名またはMACアドレス" autocomplete="off" autocorrect="off" spellcheck="false" />
+            <button type="button" class="btn-fav-toggle" data-action="toggle-favorite-device" data-step-id="${step.id}" style="border: none; background: none; cursor: pointer; font-size: 15px; padding: 2px 4px; color: ${isFav ? '#f5b041' : '#ccc'}; flex-shrink: 0;" title="${isFav ? 'お気に入りから削除' : 'お気に入りに追加'}">
+              ${isFav ? '★' : '☆'}
+            </button>
+          </div>
+        </div>
+        <!-- 2行目: お気に入り選択用のセレクトパレット -->
+        <div class="step-key-label-group" style="align-items: center; gap: 4px;">
+          <span class="step-key-label" style="min-width: 80px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary, #666);">お気に入り:</span>
+          <select class="step-input-preset" data-step-id="${step.id}" style="flex: 1; min-width: 0; padding: 2px 4px; border-radius: 4px; font-size: 11px; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #ccc); color: var(--text-color, #333);">
+            ${optionsHtml}
+          </select>
+        </div>
+      </div>
+    `;
+    editorContent = "";
   } else {
     displayContent = `
       <div style="display: flex; flex-direction: column; gap: 5px;">
@@ -301,6 +339,8 @@ function renderStepCard(step, stepNum, isLast = false) {
       ? step.moveHotkey === "ipadMove"
         ? "iPad"
         : "iPhone"
+      : step.kind === "device_switch"
+        ? "DEV_SWITCH"
       : step.kind === "click"
         ? "CLICK"
         : step.kind === "focus"
@@ -322,6 +362,8 @@ function renderStepCard(step, stepNum, isLast = false) {
       ? step.moveHotkey === "ipadMove"
         ? "move"
         : "iphone"
+      : step.kind === "device_switch"
+        ? "device-switch"
       : step.kind === "click"
         ? "click"
         : step.kind === "focus"

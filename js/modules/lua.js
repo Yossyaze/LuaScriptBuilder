@@ -507,17 +507,43 @@ lsbServer:setCallback(function(method, path, headers, body)
       return "OK", 200, {
         ["Access-Control-Allow-Origin"] = "*",
         ["Access-Control-Allow-Methods"] = "POST, OPTIONS",
-        ["Access-Control-Allow-Headers"] = "Content-Type"
+        ["Access-Control-Allow-Headers"] = "Content-Type, X-Project-Name"
       }
     else
       return "Failed to open init.lua", 500, {["Access-Control-Allow-Origin"] = "*"}
+    end
+  elseif path == "/update-js" and method == "POST" then
+    local projName = headers["X-Project-Name"] or "lsb_macro"
+    -- URLデコード処理
+    projName = projName:gsub("%%(%x%x)", function(hex)
+      return string.char(tonumber(hex, 16))
+    end)
+    -- ファイル名に使用できない文字を安全なアンダースコアに置換
+    projName = projName:gsub('[%s/\\\\\\\\?%%*:|"<>]', '_')
+    local mkDir = os.getenv("HOME") .. "/.config/MultiKeyBoard/scripts"
+    hs.fs.mkdir(os.getenv("HOME") .. "/.config")
+    hs.fs.mkdir(os.getenv("HOME") .. "/.config/MultiKeyBoard")
+    hs.fs.mkdir(mkDir)
+    local jsPath = mkDir .. "/" .. projName .. ".js"
+    local f = io.open(jsPath, "w")
+    if f then
+      f:write(body)
+      f:close()
+      hs.alert.show("MultiKeyBoard用JSを転送しました: " .. projName .. ".js", 3)
+      return "OK", 200, {
+        ["Access-Control-Allow-Origin"] = "*",
+        ["Access-Control-Allow-Methods"] = "POST, OPTIONS",
+        ["Access-Control-Allow-Headers"] = "Content-Type, X-Project-Name"
+      }
+    else
+      return "Failed to save JS", 500, {["Access-Control-Allow-Origin"] = "*"}
     end
   elseif method == "OPTIONS" then
     -- CORS プリフライトリクエストに対するレスポンスヘッダーの設定
     return "", 200, {
       ["Access-Control-Allow-Origin"] = "*",
       ["Access-Control-Allow-Methods"] = "POST, OPTIONS",
-      ["Access-Control-Allow-Headers"] = "Content-Type"
+      ["Access-Control-Allow-Headers"] = "Content-Type, X-Project-Name"
     }
   end
   return "Not Found", 404, {["Access-Control-Allow-Origin"] = "*"}

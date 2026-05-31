@@ -64,24 +64,29 @@
       <div
         style="
           display: flex;
-          gap: 8px;
-          justify-content: flex-end;
+          justify-content: space-between;
+          align-items: center;
           margin-bottom: 20px;
+          flex-wrap: wrap;
+          gap: 12px;
         "
       >
-        <button id="btnRenameProject" class="btn-ghost btn-small">
-          現在の名前を変更
-        </button>
-        <button id="btnDuplicateProject" class="btn-ghost btn-small">
-          複製
-        </button>
-        <button
-          id="btnDeleteProject"
-          class="btn-ghost btn-small"
-          style="color: #dc2626; border-color: #fca5a5"
-        >
-          削除
-        </button>
+        <div id="projectPlatformBadge" class="flow-kind" style="font-size: 0.82rem; padding: 4px 12px; font-weight: bold; border-radius: 6px; letter-spacing: 0.05em; display: inline-flex; align-items: center;"></div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnRenameProject" class="btn-ghost btn-small">
+            現在の名前を変更
+          </button>
+          <button id="btnDuplicateProject" class="btn-ghost btn-small">
+            複製
+          </button>
+          <button
+            id="btnDeleteProject"
+            class="btn-ghost btn-small"
+            style="color: #dc2626; border-color: #fca5a5"
+          >
+            削除
+          </button>
+        </div>
       </div>
 
       <details class="global-settings">
@@ -429,6 +434,9 @@
                   id="btnFlowAddIPhone"
                 >
                   ＋ iPhone追加
+                </button>
+                <button type="button" class="flow-add-btn" id="btnFlowAddDeviceSwitch" style="background-color: #e0f2fe; border-color: #bae6fd; color: #0369a1; display: none;">
+                  ＋ デバイス切替
                 </button>
                 <button type="button" class="flow-add-btn" id="btnFlowAddKey">
                   ＋ KEY追加

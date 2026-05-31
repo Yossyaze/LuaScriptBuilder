@@ -4,6 +4,7 @@ import { hotkeyLabels, NEW_STORAGE_KEY } from './modules/constants.js';
 import { num, txt, escapeHtml } from './modules/utils.js';
 import { saveToStorage, loadFromStorage } from './modules/storage.js';
 import { generateLua } from './modules/lua.js';
+import { generateJavascript } from './modules/javascript.js';
 import { 
   updateFlowPreview, 
   renderHotkeys, 
@@ -124,6 +125,82 @@ function applyState(newState) {
 
 // --- Global Functions (needed for inline HTML event handlers or external access) ---
 
+window.syncPlatformUI = function(platform) {
+  const isJs = platform === "js";
+  
+  // 表示・非表示にするアクション追加ボタンの制御
+  const jsOnlyButtons = ["btnFlowAddDeviceSwitch"];
+  const luaOnlyButtons = ["btnFlowAddBTT"];
+  
+  jsOnlyButtons.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isJs ? "flex" : "none";
+  });
+  
+  luaOnlyButtons.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isJs ? "none" : "flex";
+  });
+  
+  // 設定項目の制御 (Luaの再読込・一括停止、開始・停止ホットキーはJSモード時は隠す)
+  const recordBtns = document.querySelectorAll(".hotkey-controls");
+  recordBtns.forEach(btn => {
+    const row = btn.closest(".row");
+    if (row) {
+      const label = row.querySelector("label")?.getAttribute("for") || "";
+      const isLsbHotkey = label.includes("start") || label.includes("stop") || label.includes("reload") || label.includes("stopAll") || label.includes("Move");
+      if (isLsbHotkey) {
+        row.style.display = isJs ? "none" : "flex";
+      }
+    }
+  });
+  
+  // 待機時間設定のうち、JS非対応のアクション待機時間を隠す
+  const luaOnlyWaitSettings = ["waitBtt"];
+  luaOnlyWaitSettings.forEach(id => {
+    const el = document.getElementById(id);
+    const row = el?.closest(".row");
+    if (row) {
+      row.style.display = isJs ? "none" : "flex";
+    }
+  });
+
+  // 現在のプラットフォームバッジの更新
+  const badge = document.getElementById("projectPlatformBadge");
+  if (badge) {
+    badge.textContent = isJs ? "TARGET: MultiKeyBoard (JS)" : "TARGET: Hammerspoon (Lua)";
+    badge.style.backgroundColor = isJs ? "var(--clr-device-switch-bg)" : "var(--clr-key-bg)";
+    badge.style.color = isJs ? "var(--clr-device-switch-ink)" : "var(--clr-key-ink)";
+    badge.style.border = isJs ? "1px solid var(--clr-device-switch-line)" : "1px solid var(--clr-key-line)";
+  }
+  
+  // 出力系のラベル・アクションボタンのテキストと表示切り替え
+  const toggleBtn = document.getElementById("btnToggleOutput");
+  const downloadBtn = document.getElementById("btnDownload");
+  const sendBtn = document.getElementById("btnSendToHammerspoon");
+  const card = document.getElementById("outputCard");
+  const outputLabel = card?.querySelector("label[for='output']");
+  
+  if (toggleBtn) {
+    toggleBtn.textContent = card.classList.contains("hidden") 
+      ? (isJs ? "生成JSを表示" : "生成Luaを表示") 
+      : (isJs ? "生成JSを隠す" : "生成Luaを隠す");
+  }
+  
+  if (downloadBtn) {
+    downloadBtn.textContent = isJs ? "保存 (script.js)" : "保存 (init.lua)";
+  }
+  
+  if (sendBtn) {
+    sendBtn.textContent = isJs ? "MultiKeyBoardに送信" : "Hammerspoonに送信";
+    sendBtn.style.backgroundColor = isJs ? "#0284c7" : "#10b981";
+  }
+  
+  if (outputLabel) {
+    outputLabel.textContent = isJs ? "生成されたJS" : "生成されたLua";
+  }
+};
+
 window.loadProjectState = function(projectId) {
   if (state.activeProjectId && state.activeProjectId !== projectId && state.projects[state.activeProjectId]) {
     flushActiveProject();
@@ -135,8 +212,9 @@ window.loadProjectState = function(projectId) {
   state.stepIdSeq = p.stepIdSeq || 1;
   state.templateStepIds = p.templateStepIds || {};
   
-  // プロジェクト切り替え時に共有オブジェクト hotkeys を上書きしないように変更
-
+  // プラットフォーム設定の移行とUIの同期
+  if (!p.platform) p.platform = "lua";
+  window.syncPlatformUI(p.platform);
   
   if (p.config) {
     const fields = ["enableTimelineLog", "enableAutoStopLog", "enableExecutionAlert", "enableLoop"];
@@ -231,10 +309,14 @@ window.handleAppSelect = async function(event, stepId) {
 // --- Core Logic ---
 
 window.createNewProject = function(name) {
+  const isJs = confirm("MultiKeyBoard (JS) 用のプロジェクトにしますか？\n（[キャンセル] を選ぶと Hammerspoon (Lua) 用になります）");
+  const platform = isJs ? "js" : "lua";
+  
   const id = "proj-" + Date.now();
   state.projects[id] = {
     id,
     name,
+    platform,
     hotkeys: {
       start: { key: "s", mods: ["ctrl", "shift"] },
       stop: { key: "x", mods: ["ctrl", "shift"] },
@@ -374,6 +456,7 @@ function addStep(kind, moveHotkey = "ipadMove") {
       if (kind === "move") {
         return Number(state.globalSettings[moveHotkey === "ipadMove" ? "settleIPad" : "settleIPhone"] || 1.0);
       }
+      if (kind === "device_switch") return 1.0;
       if (kind === "key") return Number(state.globalSettings.waitKey || 0.25);
       if (kind === "click") return Number(state.globalSettings.waitClick || 0.25);
       if (kind === "focus") return Number(state.globalSettings.waitFocus || 0.25);
@@ -806,10 +889,13 @@ document.addEventListener("DOMContentLoaded", () => {
   setupAddStepButtons();
 
   // Event Listeners for Static Elements
+
   document.getElementById("btnGenerate").onclick = () => {
     try {
-      document.getElementById("output").value = generateLua();
-      setStatus("Luaを生成しました");
+      const p = state.projects[state.activeProjectId];
+      const isJs = p && p.platform === "js";
+      document.getElementById("output").value = isJs ? generateJavascript() : generateLua();
+      setStatus(isJs ? "JSを生成しました" : "Luaを生成しました");
     } catch (e) { setStatus(e.message); }
   };
 
@@ -823,22 +909,26 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnDownload").onclick = () => {
     const out = document.getElementById("output").value;
     if (!out) return setStatus("先に生成してください");
+    const p = state.projects[state.activeProjectId];
+    const isJs = p && p.platform === "js";
+    const filename = isJs ? (p.name ? p.name.replace(/[\s/\\?%*:|"<>\s]/g, "_") + ".js" : "script.js") : "init.lua";
     const blob = new Blob([out], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "init.lua"; a.click();
+    a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
   };
 
   document.getElementById("btnSendToHammerspoon").onclick = async () => {
     let out = document.getElementById("output").value;
+    const p = state.projects[state.activeProjectId];
+    const isJs = p && p.platform === "js";
     
-    // まだLuaコードが生成されていない場合は、その場で自動生成する
     if (!out) {
       try {
-        out = generateLua();
+        out = isJs ? generateJavascript() : generateLua();
         document.getElementById("output").value = out;
-        setStatus("Luaを自動生成しました");
+        setStatus(isJs ? "JSを自動生成しました" : "Luaを自動生成しました");
       } catch (e) {
         setStatus(e.message, true);
         return;
@@ -849,27 +939,34 @@ document.addEventListener("DOMContentLoaded", () => {
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = "送信中...";
-    setStatus("Hammerspoonへ設定を送信中...");
+    setStatus(isJs ? "MultiKeyBoardへ設定を送信中..." : "Hammerspoonへ設定を送信中...");
 
     try {
-      // ローカルのHammerspoonサーバー（ポート27312）にPOSTリクエストを送信
-      const response = await fetch("http://127.0.0.1:27312/update", {
+      const endpoint = isJs ? "http://127.0.0.1:27312/update-js" : "http://127.0.0.1:27312/update";
+      const headers = {
+        "Content-Type": "text/plain"
+      };
+      if (isJs) {
+        headers["X-Project-Name"] = encodeURIComponent(p.name || "lsb_macro");
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain"
-        },
+        headers: headers,
         body: out
       });
 
       if (response.ok) {
-        setStatus("Hammerspoonの設定を直接更新し、リロードしました！");
+        setStatus(isJs ? "MultiKeyBoardのJSスクリプトを直接更新しました！" : "Hammerspoonの設定を直接更新し、リロードしました！");
       } else {
         const errText = await response.text();
         throw new Error(errText || "サーバーエラーが発生しました");
       }
     } catch (e) {
       console.error(e);
-      setStatus("送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください", true);
+      setStatus(isJs 
+        ? "送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください" 
+        : "送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください", true);
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
@@ -879,7 +976,13 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnToggleOutput").onclick = () => {
     const card = document.getElementById("outputCard");
     card.classList.toggle("hidden");
-    document.getElementById("btnToggleOutput").textContent = card.classList.contains("hidden") ? "生成Luaを表示" : "生成Luaを隠す";
+    const p = state.projects[state.activeProjectId];
+    const isJs = p && p.platform === "js";
+    if (card.classList.contains("hidden")) {
+      document.getElementById("btnToggleOutput").textContent = isJs ? "生成JSを表示" : "生成Luaを表示";
+    } else {
+      document.getElementById("btnToggleOutput").textContent = isJs ? "生成JSを隠す" : "生成Luaを隠す";
+    }
   };
 
   document.getElementById("btnRenameProject").onclick = () => {
@@ -921,6 +1024,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btnFlowAddIPad").onclick = () => addStep("move", "ipadMove");
   document.getElementById("btnFlowAddIPhone").onclick = () => addStep("move", "iphoneMove");
+  document.getElementById("btnFlowAddDeviceSwitch").onclick = () => addStep("device_switch");
   document.getElementById("btnFlowAddKey").onclick = () => addStep("key");
   document.getElementById("btnFlowAddClick").onclick = () => addStep("click");
   document.getElementById("btnFlowAddFocus").onclick = () => addStep("focus");
@@ -1062,6 +1166,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (state.selectedStepId === id) state.selectedStepId = null;
         refreshFlowViews();
       }
+    } else if (t.dataset.action === "toggle-favorite-device") {
+      const stepId = Number(t.dataset.stepId);
+      const step = findStepById(stepId);
+      if (step) {
+        const name = (step.deviceName || "").trim();
+        if (name) {
+          window.toggleFavoriteDevice(name);
+          refreshFlowViews();
+        } else {
+          setStatus("切替先名を入力してからお気に入りに登録してください", true);
+        }
+      }
     } else if (t.dataset.action === "record-step") {
       const id = Number(t.dataset.stepId);
       state.recordingStepId = state.recordingStepId === id ? null : id;
@@ -1117,9 +1233,19 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   document.getElementById("flowTrack").addEventListener("change", (e) => {
-    if (e.target.type === "file" && e.target.id.startsWith("file-app-")) {
-      const stepId = Number(e.target.id.replace("file-app-", ""));
+    const t = e.target;
+    if (t.type === "file" && t.id.startsWith("file-app-")) {
+      const stepId = Number(t.id.replace("file-app-", ""));
       window.handleAppSelect(e, stepId);
+    } else if (t.classList.contains("step-input-preset")) {
+      const stepId = Number(t.dataset.stepId);
+      const val = t.value;
+      if (val) {
+        saveHistory();
+        updateStepField(stepId, "deviceName", val);
+        // コピー完了後にドロップダウンの選択をプレースホルダーに戻す
+        t.value = "";
+      }
     }
   });
 
@@ -1255,3 +1381,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   refreshFlowViews();
 });
+
+// ==========================================
+// お気に入りデバイス管理機能 (プリセット)
+// ==========================================
+window.toggleFavoriteDevice = function(deviceName) {
+  if (!state.globalSettings.favoriteDevices) {
+    state.globalSettings.favoriteDevices = [];
+  }
+  const list = state.globalSettings.favoriteDevices;
+  const idx = list.indexOf(deviceName);
+  if (idx !== -1) {
+    list.splice(idx, 1);
+    setStatus(`お気に入りから「${deviceName}」を削除しました`);
+  } else {
+    list.push(deviceName);
+    setStatus(`お気に入りに「${deviceName}」を登録しました`);
+  }
+  saveToStorage();
+};
+
+window.isFavoriteDevice = function(deviceName) {
+  if (!state.globalSettings.favoriteDevices) return false;
+  return state.globalSettings.favoriteDevices.includes(deviceName);
+};
+
+window.getFavoriteDevices = function() {
+  return state.globalSettings.favoriteDevices || [];
+};
+

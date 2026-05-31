@@ -82,8 +82,9 @@ export function defaultTitleByKind(kind, moveHotkey) {
     if (moveHotkey === "iphoneMove") return "iPhoneへ切り替え";
     return "iPadへ切り替え";
   }
+  if (kind === "device_switch") return "デバイス切り替え";
   if (kind === "click") return "アプリの座標クリック";
-  if (kind === "focus") return "アプリを前面に出す";
+  if (kind === "focus") return "アプリを前面出す";
   if (kind === "check") return "画面テキスト確認";
   if (kind === "stop") return "実行停止";
   if (kind === "jump") return "ジャンプ";
@@ -176,6 +177,8 @@ export function normalizeStep(step) {
     }
   } else if (s.kind === "jump") {
     s.targetId = step.targetId ? Number(step.targetId) : null;
+  } else if (s.kind === "device_switch") {
+    s.deviceName = (step.deviceName || "").trim();
   } else if (s.kind === "stop") {
     // No extra fields
   } else if (s.kind === "btt") {
@@ -192,7 +195,7 @@ export function normalizeStep(step) {
   }
   
   // 各ステップのデフォルト待機秒数を静的なフォールバックで定義する（共通設定変更による既存ステップの意図しない上書きを防ぐため）
-  const defaultWait = s.kind === "check" ? 0 : 0.25;
+  const defaultWait = s.kind === "check" ? 0 : (s.kind === "device_switch" ? 1.0 : 0.25);
 
   s.waitAfter = normalizeWaitAfter(step.waitAfter, defaultWait);
   return s;

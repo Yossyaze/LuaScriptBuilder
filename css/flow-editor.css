@@ -39,6 +39,10 @@
   --clr-shortcut-bg: #f8fafc;
   --clr-shortcut-ink: #334155;
   --clr-shortcut-line: #e2e8f0;
+  /* Device Switch Action */
+  --clr-device-switch-bg: #e0f2fe;
+  --clr-device-switch-ink: #0369a1;
+  --clr-device-switch-line: #bae6fd;
 }
 
 .flow {
@@ -311,6 +315,7 @@
 .flow-kind-stop { background: var(--clr-stop-bg); color: var(--clr-stop-ink); }
 .flow-kind-btt { background: var(--clr-btt-bg); color: var(--clr-btt-ink); }
 .flow-kind-shortcut { background: var(--clr-shortcut-bg); color: var(--clr-shortcut-ink); }
+.flow-kind-device-switch { background: var(--clr-device-switch-bg); color: var(--clr-device-switch-ink); }
 .flow-kind-wait { background: #fff5db; color: #8e5a00; }
 .flow-kind-label { background: #f5f3ff; color: #5b21b6; }
 
