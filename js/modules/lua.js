@@ -36,6 +36,57 @@ local function nowTimestamp()
 end
 
 -- ==========================================
+-- JXA 経由でのネイティブ Vision OCR
+-- ==========================================
+local function runNativeOcrJxa(imagePath)
+  local jxaCode = [[
+    ObjC.import('Vision');
+    ObjC.import('AppKit');
+
+    var imagePath = "]] .. imagePath .. [[";
+    var imageUrl = $.NSURL.fileURLWithPath(imagePath);
+    var image = $.NSImage.alloc.initWithContentsOfURL(imageUrl);
+    
+    if (!image) {
+        return JSON.stringify({error: "画像の読み込みに失敗しました"});
+    }
+
+    var cgImage = image.CGImageForProposedRectResolvingDescriptionContextHints(null, null, null);
+    var requestHandler = $.VNImageRequestHandler.alloc.initWithCGImageOptions(cgImage, $.NSDictionary.dictionary);
+    
+    var resultText = "";
+    var request = $.VNRecognizeTextRequest.alloc.initWithCompletionHandler(function(req, err) {
+        if (!err.isNil()) return;
+        
+        var observations = req.results;
+        var lines = [];
+        for (var i = 0; i < observations.count; i++) {
+            var obs = observations.objectAtIndex(i);
+            var candidate = obs.topCandidates(1).objectAtIndex(0);
+            lines.push(candidate.string.js);
+        }
+        resultText = lines.join("\n");
+    });
+
+    request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
+    request.recognitionLanguages = ["ja-JP", "en-US"];
+
+    requestHandler.performRequestsError([request], null);
+    
+    return JSON.stringify({text: resultText});
+  ]]
+
+  local ok, result, raw = hs.osascript.javascript(jxaCode)
+  if ok and result then
+    local data = hs.json.decode(result)
+    return data.text or ""
+  else
+    print("OCRエラー:", raw and raw.errorMessage or "不明")
+    return ""
+  end
+end
+
+-- ==========================================
 -- ログ保存用ユーティリティ
 -- ==========================================
 local LOG_DIR = os.getenv("HOME") .. "/Desktop/LuaScriptBuilder/logs/"
@@ -163,52 +214,63 @@ local function createSequence(config)
       end)
       return
     elseif s.type == "check" then
-      local task = hs.task.new("/usr/bin/shortcuts", function(exitCode, stdOut, stdErr)
-        if not running then return end
-
-        local matched = false
-        local matchedText = nil
-        if exitCode == 0 and stdOut then
-          if s.useRegex then
-            matched, matchedText = checkRegexMatch(stdOut, s.text)
-          else
-            local start, finish = string.find(stdOut, s.text, 1, true)
-            if start then
-              matched = true
-              matchedText = string.sub(stdOut, start, finish)
-            end
-          end
-        end
-
-        local cleanOut = (stdOut or ""):gsub("\\\\n", " "):sub(1, 200)
-        local logDetail = string.format("pattern=%s | screen=%s", s.text, cleanOut)
-        local waitBefore = 0.5
-        local nextIdx = nil
-
-        if matched then
-          logDetail = logDetail .. string.format(" | matched=%s", matchedText or "")
-          logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)
-          waitBefore = s.okWaitBefore or 0.5
-          nextIdx = s.okIndex
-        else
-          logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)
-          waitBefore = s.ngWaitBefore or 0.5
-          nextIdx = s.ngIndex
-        end
-        
-        logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))
-        config._timer = hs.timer.doAfter(waitBefore, function()
-          config._timer = nil
-          if not running then return end
-          runStep(nextIdx)
-        end)
-      end, {"run", "GetScreenText"})
-      
-      if s.bundleId and s.bundleId ~= "" then
-        task:setInput(s.bundleId)
-      end
-      task:start()
-      return
+      lua += `      local targetApp = "${luaString(s.bundleId || s.appName || "")}"\n`;
+      lua += `      local win = nil\n`;
+      lua += `      if targetApp ~= "" then\n`;
+      lua += `        win = hs.window.find(targetApp)\n`;
+      lua += `      end\n`;
+      lua += `      local img = nil\n`;
+      lua += `      if win then\n`;
+      lua += `        img = win:snapshot()\n`;
+      lua += `      else\n`;
+      lua += `        local mainScreen = hs.screen.mainScreen()\n`;
+      lua += `        if mainScreen then\n`;
+      lua += `          img = mainScreen:snapshot()\n`;
+      lua += `        end\n`;
+      lua += `      end\n`;
+      lua += `      local stdOut = ""\n`;
+      lua += `      if img then\n`;
+      lua += `        local tempPath = os.tmpname() .. ".png"\n`;
+      lua += `        img:saveToFile(tempPath)\n`;
+      lua += `        stdOut = runNativeOcrJxa(tempPath)\n`;
+      lua += `        os.remove(tempPath)\n`;
+      lua += `      else\n`;
+      lua += `        print("【警告】画面キャプチャの取得に失敗しました。")\n`;
+      lua += `      end\n`;
+      lua += `      local matched = false\n`;
+      lua += `      local matchedText = nil\n`;
+      lua += `      if stdOut and stdOut ~= "" then\n`;
+      lua += `        if ${s.useRegex ? "true" : "false"} then\n`;
+      lua += `          matched, matchedText = checkRegexMatch(stdOut, "${luaString(s.text)}")\n`;
+      lua += `        else\n`;
+      lua += `          local start, finish = string.find(stdOut, "${luaString(s.text)}", 1, true)\n`;
+      lua += `          if start then\n`;
+      lua += `            matched = true\n`;
+      lua += `            matchedText = string.sub(stdOut, start, finish)\n`;
+      lua += `          end\n`;
+      lua += `        end\n`;
+      lua += `      end\n`;
+      lua += `      local cleanOut = stdOut:gsub("\\\\n", " "):sub(1, 200)\n`;
+      lua += `      local logDetail = string.format("pattern=%s | screen=%s", "${luaString(s.text)}", cleanOut)\n`;
+      lua += `      local waitBefore = 0.5\n`;
+      lua += `      local nextIdx = nil\n`;
+      lua += `      if matched then\n`;
+      lua += `        logDetail = logDetail .. string.format(" | matched=%s", matchedText or "")\n`;
+      lua += `        logStep(config.enableTimelineLog, cycleCount, "CHECK_MATCH", logDetail)\n`;
+      lua += `        waitBefore = ${s.okWaitBefore ?? 0.5}\n`;
+      lua += `        nextIdx = ${s.okIndex || "nil"}\n`;
+      lua += `      else\n`;
+      lua += `        logStep(config.enableTimelineLog, cycleCount, "CHECK_NO_MATCH", logDetail)\n`;
+      lua += `        waitBefore = ${s.ngWaitBefore ?? 0.5}\n`;
+      lua += `        nextIdx = ${s.ngIndex || "nil"}\n`;
+      lua += `      end\n`;
+      lua += `      logStep(config.enableTimelineLog, cycleCount, "BRANCH_WAIT_START", string.format("%.2fs", waitBefore))\n`;
+      lua += `      config._timer = hs.timer.doAfter(waitBefore, function()\n`;
+      lua += `        config._timer = nil\n`;
+      lua += `        if not running then return end\n`;
+      lua += `        runStep(nextIdx)\n`;
+      lua += `      end)\n`;
+      lua += `      return\n`;
     elseif s.type == "move" then
       local modsStr = table.concat(s.mods or {}, ",")
       logStep(config.enableTimelineLog, cycleCount, "KEY_MOVE", string.format("key=%s mods=[%s] focus=%s", s.key, modsStr, frontAppName))

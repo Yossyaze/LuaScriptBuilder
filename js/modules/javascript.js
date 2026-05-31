@@ -165,8 +165,8 @@ while (true) {
       js += `        nextStep = ${s.jsNextIndex || "null"};\n`;
     } else if (s.kind === "check") {
       const bundleId = s.bundleId || s.appName || "";
-      js += `        // 内部のVision OCR（またはショートカット）を実行して画面テキストを取得\n`;
-      js += `        let checkResult = sys.runShortcut("GetScreenText", "${jsString(bundleId)}");\n`;
+      js += `        // 内部のVision OCRを実行して画面テキストを取得\n`;
+      js += `        let checkResult = sys.getScreenText("${jsString(bundleId)}");\n`;
       js += `        let cleanResult = checkResult.replace(/\\n/g, " ");\n`;
       js += `        let truncatedResult = cleanResult.length > 200 ? cleanResult.substring(0, 200) + "..." : cleanResult;\n`;
       if (s.useRegex) {
