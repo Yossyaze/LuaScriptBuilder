@@ -165,13 +165,20 @@ while (true) {
       js += `        nextStep = ${s.jsNextIndex || "null"};\n`;
     } else if (s.kind === "check") {
       const bundleId = s.bundleId || s.appName || "";
-      js += `        // Appleショートカット'GetScreenText'を実行して画面テキストを取得\n`;
+      js += `        // 内部のVision OCR（またはショートカット）を実行して画面テキストを取得\n`;
       js += `        let checkResult = sys.runShortcut("GetScreenText", "${jsString(bundleId)}");\n`;
+      js += `        let cleanResult = checkResult.replace(/\\n/g, " ");\n`;
+      js += `        let truncatedResult = cleanResult.length > 200 ? cleanResult.substring(0, 200) + "..." : cleanResult;\n`;
       if (s.useRegex) {
-        js += `        let matched = (new RegExp("${jsString(s.text)}")).test(checkResult);\n`;
+        js += `        let regex = new RegExp("${jsString(s.text)}");\n`;
+        js += `        let matchObj = checkResult.match(regex);\n`;
+        js += `        let matched = !!matchObj;\n`;
+        js += `        let matchedText = matched ? matchObj[0] : "";\n`;
       } else {
         js += `        let matched = checkResult.indexOf("${jsString(s.text)}") !== -1;\n`;
+        js += `        let matchedText = matched ? "${jsString(s.text)}" : "";\n`;
       }
+      js += `        sys.log("【判定】ターゲット: '${jsString(s.text)}' | 結果: " + (matched ? "一致 [マッチ箇所: '" + matchedText + "']" : "不一致") + " | 取得テキスト(一部): [" + truncatedResult + "]");\n`;
       js += `        if (matched) {\n`;
       js += `          sys.sleep(${Math.round((s.okWaitBefore ?? 0.5) * 1000)});\n`;
       js += `          nextStep = ${s.jsOkIndex || "null"};\n`;
