@@ -143,6 +143,7 @@ export function normalizeStep(step) {
     s.moveHotkey = step.moveHotkey || "ipadMove";
   } else if (s.kind === "click") {
     s.appName = (step.appName || "mnst_ex_master").trim();
+    s.bundleId = (step.bundleId || "").trim();
     s.x = Number.isFinite(Number(step.x)) ? Number(step.x) : 178;
     s.y = Number.isFinite(Number(step.y)) ? Number(step.y) : 545;
     s.settleBefore = Number.isFinite(Number(step.settleBefore))
@@ -150,6 +151,7 @@ export function normalizeStep(step) {
       : 0.2;
   } else if (s.kind === "focus") {
     s.appName = (step.appName || "KeyPad").trim();
+    s.bundleId = (step.bundleId || "").trim();
   } else if (s.kind === "check") {
     s.text = (step.text || "").trim();
     s.useRegex = !!step.useRegex;
@@ -191,6 +193,7 @@ export function normalizeStep(step) {
     s.mods = Array.isArray(step.mods) ? step.mods : [];
     // アプリ前面化（フォーカス）機能用のフィールドを追加
     s.appName = step.appName !== undefined ? (step.appName || "").trim() : "";
+    s.bundleId = (step.bundleId || "").trim();
     s.settleBefore = Number.isFinite(Number(step.settleBefore)) ? Number(step.settleBefore) : 0.2;
   }
   
