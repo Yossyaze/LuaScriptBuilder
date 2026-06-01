@@ -14,53 +14,78 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
           if (req.url === '/api/running-apps') {
-            const script = `osascript -e '
-            set resultList to {}
-            tell application "System Events"
-                set processList to every process whose background only is false
-                repeat with p in processList
-                    try
-                        set procName to name of p
-                        set procId to bundle identifier of p
-                        if procId is missing value then
-                            set end of resultList to procName & ":"
-                        else
-                            set end of resultList to procName & ":" & procId
-                        end if
-                    on error
-                        -- ignore
-                    end try
-                end repeat
-            end tell
-            return resultList
-            '`;
-            exec(script, (err, stdout, stderr) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: err.message }));
-                return;
-              }
-              const apps = stdout
-                .trim()
-                .split(',')
-                .map(item => {
-                  const parts = item.split(':');
-                  const name = parts[0] ? parts[0].trim() : '';
-                  const id = parts[1] ? parts[1].trim() : '';
-                  return { name, id };
-                })
-                .filter(app => app.name.length > 0)
-                .filter((app, index, self) => 
-                  self.findIndex(a => a.name === app.name) === index
-                )
-                .sort((a, b) => a.name.localeCompare(b.name));
-              
-              res.writeHead(200, { 
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-cache'
+            const tempFile = path.join('/tmp', `apps_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.swift`);
+            const swiftCode = `import AppKit
+import Foundation
+
+let workspace = NSWorkspace.shared
+let apps = workspace.runningApplications
+
+var resultList: [[String: String]] = []
+
+for app in apps {
+    guard app.activationPolicy == .regular else { continue }
+    guard let bundleId = app.bundleIdentifier else { continue }
+    
+    var name = ""
+    if let bundleURL = app.bundleURL,
+       let bundle = Bundle(url: bundleURL) {
+        let info = bundle.localizedInfoDictionary ?? bundle.infoDictionary ?? [:]
+        if let displayName = info["CFBundleDisplayName"] as? String {
+            name = displayName
+        } else if let bundleName = info["CFBundleName"] as? String {
+            name = bundleName
+        }
+    }
+    
+    if name.isEmpty {
+        name = app.localizedName ?? ""
+    }
+    
+    resultList.append(["name": name, "id": bundleId])
+}
+
+if let jsonData = try? JSONSerialization.data(withJSONObject: resultList, options: []),
+   let jsonString = String(data: jsonData, encoding: .utf8) {
+    print(jsonString)
+}
+`;
+            try {
+              fs.writeFileSync(tempFile, swiftCode);
+              exec(`swift "${tempFile}" < /dev/null`, (err, stdout, stderr) => {
+                try { fs.unlinkSync(tempFile); } catch (e) {}
+                
+                if (err) {
+                  res.writeHead(500, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: err.message }));
+                  return;
+                }
+                
+                let parsedApps = [];
+                try {
+                  parsedApps = JSON.parse(stdout.trim());
+                } catch (e) {
+                  console.error("Failed to parse swift output:", e);
+                }
+
+                const apps = parsedApps
+                  .filter(app => app.name.length > 0)
+                  .filter((app, index, self) => 
+                    self.findIndex(a => a.name === app.name) === index
+                  )
+                  .sort((a, b) => a.name.localeCompare(b.name));
+                
+                res.writeHead(200, { 
+                  'Content-Type': 'application/json',
+                  'Cache-Control': 'no-cache'
+                });
+                res.end(JSON.stringify({ apps }));
               });
-              res.end(JSON.stringify({ apps }));
-            });
+            } catch (e) {
+              console.error("Failed to run running apps swift script:", e);
+              res.writeHead(500);
+              res.end();
+            }
           } else if (req.url.startsWith('/api/app-icon')) {
             const urlParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
             const bundleId = urlParams.searchParams.get('bundleId');
