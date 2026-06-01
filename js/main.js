@@ -279,7 +279,7 @@ window.handleAppSelect = async function(event, stepId) {
         const match = xml.match(regex);
         return match ? match[1] : null;
       };
-      appName = getPlistValue(text, "CFBundleName");
+      appName = getPlistValue(text, "CFBundleDisplayName") || getPlistValue(text, "CFBundleName");
       bundleId = getPlistValue(text, "CFBundleIdentifier");
     } catch (e) { console.error(e); }
   }
