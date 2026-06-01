@@ -675,11 +675,35 @@
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         min-width: 180px;
         margin-top: 4px;
-        overflow: hidden;
+        overflow-y: auto;
+        max-height: 250px;
       }
 
       .preset-menu.hidden {
         display: none;
+      }
+
+      .preset-section-title {
+        padding: 6px 12px;
+        font-weight: 700;
+        font-size: 0.72rem;
+        color: #64748b;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+        letter-spacing: 0.05em;
+        text-align: left;
+      }
+
+      .preset-section-title.hidden {
+        display: none;
+      }
+
+      .preset-loading {
+        padding: 10px 12px;
+        font-size: 0.78rem;
+        color: #94a3b8;
+        font-style: italic;
+        text-align: center;
       }
 
       .preset-item {
@@ -690,6 +714,10 @@
         color: #334155;
         white-space: nowrap;
         text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
       }
 
       .preset-item:hover {
@@ -699,6 +727,63 @@
 
       .preset-item:not(:last-child) {
         border-bottom: 1px solid #f1f5f9;
+      }
+
+      .preset-item-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #f1f5f9;
+      }
+
+      .preset-item-row:hover {
+        background: #f1f5f9;
+      }
+
+      .preset-item-row:hover .preset-item {
+        color: var(--accent);
+      }
+
+      .preset-delete-btn {
+        background: none;
+        border: none;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #ef4444;
+        cursor: pointer;
+        font-weight: bold;
+        transition: transform 0.1s, color 0.1s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .preset-delete-btn:hover {
+        transform: scale(1.2);
+        color: #dc2626;
+      }
+
+      .preset-menu-divider {
+        border-top: 1px solid #e2e8f0;
+        margin: 4px 0;
+      }
+
+      .preset-add-item {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        color: #0ea5e9;
+        cursor: pointer;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+        transition: background 0.15s, color 0.15s;
+      }
+
+      .preset-add-item:hover {
+        background: #f0f9ff;
+        color: #0284c7;
       }
 
       /* Auth Styles */

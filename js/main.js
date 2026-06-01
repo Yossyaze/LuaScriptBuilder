@@ -1,5 +1,6 @@
 import { state, nextStepId, findStepById, flushActiveProject, normalizeStep, defaultTitleByKind } from './modules/state.js';
 import { hotkeyLabels, NEW_STORAGE_KEY } from './modules/constants.js';
+import { getAllPresets, addCustomPreset, deleteCustomPreset } from './modules/presets.js';
 
 import { num, txt, escapeHtml } from './modules/utils.js';
 import { saveToStorage, loadFromStorage } from './modules/storage.js';
@@ -290,21 +291,62 @@ window.handleAppSelect = async function(event, stepId) {
 
   const step = findStepById(stepId);
   if (step) {
-    if (step.kind === "check") {
-      step.appName = appName || "";
-      step.bundleId = bundleId || "";
-      refreshFlowViews();
-      setStatus(`アプリ設定を更新しました: ${appName} (${bundleId || "ID取得不可"})`);
-    } else if (appName) {
-      step.appName = appName;
-      refreshFlowViews();
-      setStatus("アプリ名を自動設定しました: " + appName);
-    }
+    step.appName = appName || "";
+    step.bundleId = bundleId || "";
+    refreshFlowViews();
+    setStatus(`アプリ設定を更新しました: ${appName} (${bundleId || "ID取得不可"})`);
   } else {
     setStatus("ステップが見つかりませんでした");
   }
   event.target.value = "";
 };
+
+// ==========================================
+// プリセットUI描画処理
+// ==========================================
+function renderPresetsList(stepId) {
+  const listContainer = document.getElementById(`preset-apps-list-${stepId}`);
+  if (!listContainer) return;
+  
+  const presets = getAllPresets();
+  if (presets.length === 0) {
+    listContainer.innerHTML = '<div class="preset-loading">登録済みのアプリなし</div>';
+  } else {
+    listContainer.innerHTML = presets.map(p => {
+      const deleteBtn = `<button type="button" class="preset-delete-btn" data-action="delete-preset" data-id="${p.id}" data-step-id="${stepId}" title="プリセットから削除">×</button>`;
+      return `
+        <div class="preset-item-row">
+          <div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${stepId}" style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; min-width: 0;">
+            <img src="/api/app-icon?bundleId=${p.id}" style="width: 20px; height: 20px; object-fit: contain; flex-shrink: 0;" onerror="this.style.display='none';" />
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
+          </div>
+          ${deleteBtn}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 現在ステップに適用されているアプリ名をボタンに動的反映し、未設定時は非表示にする
+  const addButton = document.querySelector(`.preset-add-item[data-step-id="${stepId}"]`);
+  const divider = document.getElementById(`preset-menu-divider-${stepId}`);
+  const step = findStepById(Number(stepId));
+  const appName = step ? (step.appName || "").trim() : "";
+  
+  console.log("[LSB Debug] renderPresetsList called. stepId:", stepId, "stepObj:", step, "appName:", appName, "addButton:", addButton);
+  
+  if (addButton) {
+    if (appName) {
+      addButton.textContent = `＋ 「${appName}」をプリセットに登録`;
+      addButton.style.display = "block";
+      if (divider) divider.style.display = "block";
+      console.log("[LSB Debug] Preset add button SHOWN. Text:", addButton.textContent);
+    } else {
+      addButton.style.display = "none";
+      if (divider) divider.style.display = "none";
+      console.log("[LSB Debug] Preset add button HIDDEN (appName is empty)");
+    }
+  }
+}
 
 // --- Core Logic ---
 
@@ -1156,7 +1198,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnRedo").onclick = () => window.redo();
 
   document.getElementById("flowTrack").onclick = (e) => {
-    const t = e.target;
+    console.log("[LSB Debug] Raw click event. target:", e.target, "currentTarget:", e.currentTarget);
+    const t = e.target.closest("[data-action]") || e.target;
+    console.log("[LSB Debug] Click action detected:", t.dataset.action, "stepId:", t.dataset.stepId, "el:", t);
     if (t.dataset.action === "delete") {
       saveHistory();
       const id = Number(t.dataset.stepId);
@@ -1185,9 +1229,109 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (t.dataset.action === "select-app") {
       document.getElementById(`file-app-${t.dataset.stepId}`).click();
     } else if (t.dataset.action === "toggle-presets") {
-      const menu = document.getElementById(`preset-menu-${t.dataset.stepId}`);
+      const stepId = t.dataset.stepId;
+      const menu = document.getElementById(`preset-menu-${stepId}`);
       if (menu) {
         menu.classList.toggle("hidden");
+        
+        if (!menu.classList.contains("hidden")) {
+          renderPresetsList(stepId);
+        }
+        
+        // メニュー以外をクリックした時に閉じるための処理
+        const closeMenu = (e) => {
+          if (!menu.contains(e.target) && e.target !== t) {
+            menu.classList.add("hidden");
+            document.removeEventListener("click", closeMenu);
+          }
+        };
+        if (!menu.classList.contains("hidden")) {
+          setTimeout(() => document.addEventListener("click", closeMenu), 0);
+        }
+      }
+    } else if (t.dataset.action === "add-to-presets") {
+      e.preventDefault();
+      e.stopPropagation();
+      const stepId = Number(t.dataset.stepId);
+      const step = findStepById(stepId);
+      console.log("[LSB Debug] Add to presets clicked. StepId:", stepId, "StepObject:", step);
+      if (step) {
+        let appName = (step.appName || "").trim();
+        let bundleId = (step.bundleId || "").trim();
+        console.log("[LSB Debug] Initial state - appName:", appName, "bundleId:", bundleId);
+        
+        // bundleId が空の場合、既存のプリセット定義から逆引きして補完を試みる
+        if (!bundleId && appName) {
+          const matched = getAllPresets().find(p => p.name.toLowerCase() === appName.toLowerCase());
+          if (matched) {
+            bundleId = matched.id;
+            step.bundleId = bundleId; // ステップにも格納
+            console.log("[LSB Debug] Bundle ID completed via search:", bundleId);
+          }
+        }
+        
+        try {
+          console.log("[LSB Debug] Calling addCustomPreset with:", appName, bundleId);
+          addCustomPreset(appName, bundleId);
+          setStatus(`「${appName}」をプリセットに登録しました`);
+          renderPresetsList(stepId);
+          console.log("[LSB Debug] Add custom preset succeeded!");
+        } catch (err) {
+          console.error("[LSB Debug] Add custom preset failed with error:", err);
+          alert(err.message);
+        }
+      } else {
+        console.warn("[LSB Debug] Step not found for stepId:", stepId);
+      }
+    } else if (t.dataset.action === "delete-preset") {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = t.dataset.id;
+      const stepId = t.dataset.stepId;
+      
+      if (confirm("このアプリをプリセットから削除しますか？")) {
+        const success = deleteCustomPreset(id);
+        if (success) {
+          setStatus("プリセットから削除しました");
+        } else {
+          setStatus("プリセットの削除に失敗しました", true);
+        }
+        renderPresetsList(stepId);
+      }
+    } else if (t.dataset.action === "toggle-running") {
+      const stepId = t.dataset.stepId;
+      const menu = document.getElementById(`running-menu-${stepId}`);
+      if (menu) {
+        menu.classList.toggle("hidden");
+        
+        // メニューが表示されたときに動作中のアプリを取得する
+        if (!menu.classList.contains("hidden")) {
+          const listContainer = document.getElementById(`running-apps-list-${stepId}`);
+          if (listContainer) {
+            listContainer.innerHTML = '<div class="preset-loading">読み込み中...</div>';
+            
+            fetch('/api/running-apps')
+              .then(res => {
+                if (!res.ok) throw new Error("HTTP error " + res.status);
+                return res.json();
+              })
+              .then(data => {
+                if (data.apps && data.apps.length > 0) {
+                  listContainer.innerHTML = data.apps.map(app => {
+                    const iconHtml = app.id ? `<img src="/api/app-icon?bundleId=${app.id}" style="width: 20px; height: 20px; object-fit: contain; flex-shrink: 0;" onerror="this.style.display='none';" />` : '';
+                    return `<div class="preset-item" data-name="${app.name}" data-id="${app.id}" data-step-id="${stepId}">${iconHtml}${app.name}</div>`;
+                  }).join('');
+                } else {
+                  listContainer.innerHTML = '<div class="preset-loading">動作中のアプリなし</div>';
+                }
+              })
+              .catch(err => {
+                console.error("Failed to load running apps:", err);
+                listContainer.innerHTML = '<div class="preset-loading" style="color: #ef4444;">取得失敗</div>';
+              });
+          }
+        }
+        
         // メニュー以外をクリックした時に閉じるための処理
         const closeMenu = (e) => {
           if (!menu.contains(e.target) && e.target !== t) {
@@ -1208,17 +1352,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const step = findStepById(Number(stepId));
         if (step) {
           saveHistory();
-          if (step.kind === "check") {
-            step.appName = name;
-            step.bundleId = id;
-            // DOMを直接更新して即時反映を見せる
-            const input = document.querySelector(`input[data-field="bundleId"][data-step-id="${stepId}"]`);
-            if (input) input.value = id;
-          } else {
-            step.appName = name;
-            // DOMを直接更新して即時反映を見せる
-            const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
-            if (input) input.value = name;
+          step.appName = name;
+          step.bundleId = id; // すべてのステップで bundleId を保存するように修正
+          
+          // DOMを直接更新して即時反映を見せる
+          const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
+          if (input) input.value = name;
+          
+          // アイコンの即時表示更新
+          const iconDisplay = document.getElementById(`app-icon-display-${stepId}`);
+          if (iconDisplay) {
+            iconDisplay.src = id ? `/api/app-icon?bundleId=${id}` : '';
+            iconDisplay.style.display = id ? 'block' : 'none';
           }
           setStatus(`プリセット「${name}」を適用しました`);
           // メニューを閉じる
@@ -1251,7 +1396,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Selection logic
   document.addEventListener("mousedown", (e) => {
-    if (e.target.closest("button") || e.target.closest("input") || e.target.closest("select") || e.target.closest(".preset-item") || e.target.closest(".preset-btn")) return;
+    if (
+      e.target.closest("button") || 
+      e.target.closest("input") || 
+      e.target.closest("select") || 
+      e.target.closest(".preset-item") || 
+      e.target.closest(".preset-btn") ||
+      e.target.closest(".preset-add-item") ||
+      e.target.closest(".preset-delete-btn") ||
+      e.target.closest(".preset-menu")
+    ) return;
     const stepEl = e.target.closest(".flow-step");
     const splitColEl = e.target.closest(".flow-split-col");
     if (stepEl) {

@@ -92,6 +92,7 @@ export const icons = {
   btt: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg>`,
   shortcut: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
   google: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.14-4.53z" fill="#EA4335"/></svg>`,
+  activity: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
 };
 
 export function setupAddStepButtons() {
@@ -122,6 +123,13 @@ export function setupAddStepButtons() {
 }
 
 function renderStepCard(step, stepNum, isLast = false) {
+  let appIconSrc = "";
+  if (step.appName) {
+    const preset = APP_PRESETS.find(p => p.name === step.appName);
+    const bid = step.bundleId || (preset ? preset.id : "");
+    appIconSrc = bid ? `/api/app-icon?bundleId=${bid}` : "";
+  }
+
   let icon = icons.key;
   if (step.kind === "move") {
     icon = step.moveHotkey === "ipadMove" ? icons.ipad : icons.iphone;
@@ -153,11 +161,22 @@ function renderStepCard(step, stepNum, isLast = false) {
     displayContent = `
       <div style="display: flex; flex-direction: column; gap: 5px;">
         <div class="step-key-label-group">
-          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (クリック対象)" />
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (クリック対象)" readonly />
           <div class="preset-dropdown-container">
             <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
             <div class="preset-menu hidden" id="preset-menu-${step.id}">
-              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
@@ -184,11 +203,22 @@ function renderStepCard(step, stepNum, isLast = false) {
   } else if (step.kind === "focus") {
     displayContent = `
       <div class="step-key-label-group">
-        <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (前面に出す)" />
+        <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+          <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+        </div>
+        <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (前面に出す)" readonly />
         <div class="preset-dropdown-container">
           <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
           <div class="preset-menu hidden" id="preset-menu-${step.id}">
-            ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+            <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+            <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+            <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+          </div>
+        </div>
+        <div class="preset-dropdown-container">
+          <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+          <div class="preset-menu hidden" id="running-menu-${step.id}">
+            <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
           </div>
         </div>
         <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
@@ -207,11 +237,22 @@ function renderStepCard(step, stepNum, isLast = false) {
           </label>
         </div>
         <div class="step-key-label-group" style="align-items: center; gap: 8px;">
-          <input type="text" class="step-input" style="flex:1;" data-field="bundleId" data-step-id="${step.id}" value="${escapeHtml(step.bundleId || step.appName || "")}" placeholder="バンドル識別子 (例: com.apple.Safari)" />
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名" readonly />
           <div class="preset-dropdown-container">
             <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
             <div class="preset-menu hidden" id="preset-menu-${step.id}">
-              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
@@ -319,11 +360,22 @@ function renderStepCard(step, stepNum, isLast = false) {
         </div>
         <!-- アプリ前面化（フォーカス）用のUIを追加 -->
         <div class="step-key-label-group">
-          <input type="text" class="step-input" style="flex:1; min-width: 0;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (入力前にフォーカス・任意)" />
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1; min-width: 0;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (入力前にフォーカス・任意)" readonly />
           <div class="preset-dropdown-container">
             <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
             <div class="preset-menu hidden" id="preset-menu-${step.id}">
-              ${APP_PRESETS.map(p => `<div class="preset-item" data-name="${p.name}" data-id="${p.id}" data-step-id="${step.id}">${p.name}</div>`).join('')}
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
