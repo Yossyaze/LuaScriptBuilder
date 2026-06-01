@@ -27,19 +27,20 @@ for app in apps {
     guard app.activationPolicy == .regular else { continue }
     guard let bundleId = app.bundleIdentifier else { continue }
     
-    var name = ""
-    if let bundleURL = app.bundleURL,
-       let bundle = Bundle(url: bundleURL) {
-        let info = bundle.localizedInfoDictionary ?? bundle.infoDictionary ?? [:]
-        if let displayName = info["CFBundleDisplayName"] as? String {
-            name = displayName
-        } else if let bundleName = info["CFBundleName"] as? String {
-            name = bundleName
-        }
-    }
+    // localizedName（「カレンダー」等の表示名）を最優先で取得
+    var name = app.localizedName ?? ""
     
+    // 取得できなかった場合のフォールバックとして plist のパースを行う
     if name.isEmpty {
-        name = app.localizedName ?? ""
+        if let bundleURL = app.bundleURL,
+           let bundle = Bundle(url: bundleURL) {
+            let info = bundle.localizedInfoDictionary ?? bundle.infoDictionary ?? [:]
+            if let displayName = info["CFBundleDisplayName"] as? String {
+                name = displayName
+            } else if let bundleName = info["CFBundleName"] as? String {
+                name = bundleName
+            }
+        }
     }
     
     resultList.append(["name": name, "id": bundleId])
