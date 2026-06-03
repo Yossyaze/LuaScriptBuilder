@@ -43,6 +43,23 @@
   --clr-device-switch-bg: #e0f2fe;
   --clr-device-switch-ink: #0369a1;
   --clr-device-switch-line: #bae6fd;
+
+  /* Default Theme Accent (Lua/Green fallback) */
+  --theme-accent: #10b981;
+  --theme-accent-glow: rgba(16, 185, 129, 0.15);
+  --theme-accent-light: #f0fdf4;
+}
+
+body[data-platform="lua"] {
+  --theme-accent: #10b981;
+  --theme-accent-glow: rgba(16, 185, 129, 0.15);
+  --theme-accent-light: #f0fdf4;
+}
+
+body[data-platform="js"] {
+  --theme-accent: #0284c7;
+  --theme-accent-glow: rgba(2, 132, 199, 0.15);
+  --theme-accent-light: #f0f9ff;
 }
 
 .flow {
@@ -119,22 +136,22 @@
 }
 
 .flow-step.selected {
-  border-color: #3b82f6 !important;
+  border-color: var(--theme-accent) !important;
   box-shadow:
-    0 0 0 1px #3b82f6,
-    0 0 0 4px rgba(59, 130, 246, 0.15),
+    0 0 0 1px var(--theme-accent),
+    0 0 0 4px var(--theme-accent-glow),
     0 4px 12px rgba(18, 38, 63, 0.12);
-  background: #f0f7ff !important;
+  background: var(--theme-accent-light) !important;
 }
 
 .flow-step.dragging {
   opacity: 0.4;
-  border: 2px dashed #3b82f6;
+  border: 2px dashed var(--theme-accent);
   box-shadow: none;
 }
 
 .flow-step.drop-before {
-  box-shadow: inset 0 4px 0 #3b82f6;
+  box-shadow: inset 0 4px 0 var(--theme-accent);
 }
 
 .flow-split-col.drop-in,
@@ -144,13 +161,13 @@
 .flow-loop-connector.drag-over,
 .flow-end-connector.drag-over,
 .flow-merge-pill.drag-over {
-  background: #eff6ff !important;
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+  background: var(--theme-accent-light) !important;
+  border-color: var(--theme-accent) !important;
+  box-shadow: 0 0 0 3px var(--theme-accent-glow) !important;
 }
 
 .flow-step.drag-over-top {
-  border-top: 4px solid #3b82f6 !important;
+  border-top: 4px solid var(--theme-accent) !important;
   margin-top: -3px; /* ボーダー分だけ調整 */
 }
 
@@ -161,17 +178,17 @@
 }
 
 .flow-split-header.selected {
-  border-color: #3b82f6 !important;
-  background: #f0f7ff !important;
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-light) !important;
   box-shadow:
-    0 0 0 1px #3b82f6,
-    0 0 0 4px rgba(59, 130, 246, 0.15);
+    0 0 0 1px var(--theme-accent),
+    0 0 0 4px var(--theme-accent-glow);
 }
 
 .flow-split-empty.selected {
-  border-color: #3b82f6 !important;
-  background: #f0f7ff !important;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-light) !important;
+  box-shadow: 0 0 0 4px var(--theme-accent-glow);
 }
 
 .flow-connector {
@@ -277,10 +294,10 @@
 }
 
 .step-title-input:focus {
-  border-color: #3b82f6;
+  border-color: var(--theme-accent);
   background: #fff;
   outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 2px var(--theme-accent-glow);
 }
 
 .flow-index {
@@ -457,7 +474,27 @@
   gap: 8px;
   padding: 8px 16px;
   min-width: 140px;
-  transition: all 0.15s;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    display 0.2s,
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
+  transition-behavior: allow-discrete;
+}
+
+/* Entry animation: transition FROM these values when button becomes flex */
+@starting-style {
+  .flow-add-btn {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* Exit animation: target values when display: none inline style is applied */
+.flow-add-btn[style*="display: none"] {
+  opacity: 0;
+  transform: scale(0.9);
 }
 
 .flow-add-btn svg {
@@ -617,9 +654,9 @@
 }
 
 .flow-split-empty:hover {
-  background: #f0f9ff;
-  border-color: #3b82f6;
-  color: #3b82f6;
+  background: var(--theme-accent-light);
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 
 .flow-split-empty .empty-label {
@@ -681,10 +718,10 @@
 }
 
 .flow-merge-pill.selected {
-  border-color: #3b82f6 !important;
+  border-color: var(--theme-accent) !important;
   box-shadow:
-    0 0 0 1px #3b82f6,
-    0 0 0 4px rgba(59, 130, 246, 0.15);
+    0 0 0 1px var(--theme-accent),
+    0 0 0 4px var(--theme-accent-glow);
 }
 
 /* ========== JUMP ラベル & グループ ========== */
@@ -732,4 +769,34 @@
   .flow-edit-inline {
     width: 100%;
   }
+}
+
+/* 非サポートアクションの警告スタイル */
+.flow-step.unsupported {
+  border: 1px dashed #f87171 !important; /* 赤い点線ボーダー */
+  background: #fef2f2 !important; /* 薄い赤色背景 */
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08) !important;
+}
+
+.flow-step.unsupported.selected {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px #ef4444, 0 0 0 4px rgba(239, 68, 68, 0.2), 0 4px 12px rgba(239, 68, 68, 0.15) !important;
+  background: #fee2e2 !important;
+}
+
+.unsupported-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: #fee2e2;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 6px;
 }

@@ -194,7 +194,8 @@ while (true) {
     } else if (s.kind === "stop") {
       js += `        nextStep = null;\n`;
     } else if (s.kind === "btt") {
-      js += `        sys.log("※BetterTouchToolトリガーはMultiKeyBoardでは未サポートです (${jsString(s.triggerName)})");\n`;
+      js += `        sys.log("【BTTトリガー】トリガー名: '${jsString(s.triggerName)}' を実行します");\n`;
+      js += `        sys.openUrl("btt://trigger_named/?trigger_name=" + encodeURIComponent("${jsString(s.triggerName)}"));\n`;
       js += `        sys.sleep(${Math.round((s.waitAfter ?? 0.25) * 1000)});\n`;
       js += `        nextStep = ${s.jsNextIndex || "null"};\n`;
     } else if (s.kind === "shortcut") {

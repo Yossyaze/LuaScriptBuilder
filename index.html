@@ -54,130 +54,111 @@
           </div>
         </div>
       </div>
-      <!-- プロジェクト切り替えタブをヘッダーの最下部に固定配置 -->
-      <div class="tabs-container" id="projectTabs"></div>
+      <!-- プロジェクト切り替えタブはヘッダーから左サイドバーに移行しました -->
     </div>
 
     <div class="wrap">
-      <p class="hint" style="margin-top: 0; margin-bottom: 20px">
-        Hammerspoon向けのループ制御スクリプトをフォーム入力から生成します。注意:
-        アクセシビリティ権限、KeyPad側ショートカット設定、iPadのSwitch
-        Controlキー登録を先に済ませてください。
-      </p>
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-          flex-wrap: wrap;
-          gap: 12px;
-        "
-      >
-        <div id="projectPlatformBadge" class="flow-kind" style="font-size: 0.82rem; padding: 4px 12px; font-weight: bold; border-radius: 6px; letter-spacing: 0.05em; display: inline-flex; align-items: center;"></div>
-        <div style="display: flex; gap: 8px;">
-          <button id="btnSwitchProjectPlatform" class="btn-ghost btn-small">
-            JSへ切替
-          </button>
-          <button id="btnRenameProject" class="btn-ghost btn-small">
-            現在の名前を変更
-          </button>
-          <button id="btnDuplicateProject" class="btn-ghost btn-small">
-            複製
-          </button>
-          <button
-            id="btnDeleteProject"
-            class="btn-ghost btn-small"
-            style="color: #dc2626; border-color: #fca5a5"
-          >
-            削除
+      <!-- 左ペイン: プロジェクトエクスプローラー（サイドバー） -->
+      <aside class="project-sidebar card" id="projectSidebar">
+        <div class="sidebar-header">
+          <h2>プロジェクト</h2>
+          <button type="button" class="btn-ghost btn-small tab-add" id="btnSidebarAddProject" title="新規プロジェクト作成" style="padding: 4px 8px !important; font-size: 1.1rem; line-height: 1; border-radius: 6px !important;">
+            ＋
           </button>
         </div>
-      </div>
+        <div class="project-list" id="projectSidebarList">
+          <!-- JSで動的にプロジェクトツリーを生成 -->
+        </div>
+      </aside>
 
+      <!-- 中央ペイン: エディタエリア -->
+      <div class="editor-pane">
 
-
-
-
-      <div class="main-columns">
-        <section class="card">
-          <h1>実行フロー（時系列）</h1>
-          <p>
-            1周の流れを可視化します。タブでリスト表示とグラフ表示を切り替えられます。
-          </p>
-
-          <div class="flow-tabs">
-            <div class="flow-tab active" id="tabList">📝 リスト編集</div>
-            <div class="flow-tab" id="tabGraph">🕸️ フロー図確認</div>
-          </div>
-
-          <div id="viewList">
-
-            <div class="flow-shell">
-              <div class="flow-track" id="flowTrack"></div>
-
+        <div class="main-columns">
+          <section class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 10px;">
+              <h1 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.35rem;">
+                実行フロー: <span id="activeProjectNameDisplay" style="font-weight: 800; color: var(--theme-accent, var(--accent-2));"></span>
+              </h1>
+              <div id="projectPlatformBadge" class="flow-kind" style="font-size: 0.78rem; padding: 4px 12px; font-weight: bold; border-radius: 6px; letter-spacing: 0.05em; display: inline-flex; align-items: center;"></div>
             </div>
-          </div>
+            <p style="margin-top: 8px;">
+              1周の流れを可視化します。タブでリスト表示とグラフ表示を切り替えられます。
+            </p>
 
-          <div id="viewGraph" style="display: none">
-            <div id="mermaidContainer" class="mermaid"></div>
-          </div>
-        </section>
+            <div class="flow-tabs">
+              <div class="flow-tab active" id="tabList">📝 リスト編集</div>
+              <div class="flow-tab" id="tabGraph">🕸️ フロー図確認</div>
+            </div>
 
-        <section class="card sticky-sidebar">
-          <div class="grid">
-            <div class="span-2">
-              <p class="section-title">アクション追加</p>
-              <div class="flow-actions" style="margin-bottom: 20px">
-                <button type="button" class="flow-add-btn" id="btnFlowAddIPad">
-                  ＋ iPad追加
-                </button>
-                <button
-                  type="button"
-                  class="flow-add-btn"
-                  id="btnFlowAddIPhone"
-                >
-                  ＋ iPhone追加
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddDeviceSwitch" style="background-color: #e0f2fe; border-color: #bae6fd; color: #0369a1; display: none;">
-                  ＋ デバイス切替
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddKey">
-                  ＋ KEY追加
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddClick">
-                  ＋ アプリクリック
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddFocus">
-                  ＋ アプリ前面
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddCheck">
-                  ＋ テキスト確認
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddJump">
-                  ＋ ジャンプ
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddStop">
-                  ＋ 停止
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddBTT">
-                  ＋ BTT
-                </button>
-                <button type="button" class="flow-add-btn" id="btnFlowAddShortcut">
-                  ＋ ショートカット
-                </button>
+            <div id="viewList">
+
+              <div class="flow-shell">
+                <div class="flow-track" id="flowTrack"></div>
+
               </div>
             </div>
 
-            <div class="row span-2 row-toggle">
-              <label for="enableLoop">実行をループさせる</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="enableLoop" checked>
-                <span class="toggle-slider"></span>
-              </label>
+            <div id="viewGraph" style="display: none">
+              <div id="mermaidContainer" class="mermaid"></div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section class="card sticky-sidebar">
+            <div class="grid">
+              <div class="span-2">
+                <p class="section-title">アクション追加</p>
+                <div class="flow-actions" style="margin-bottom: 20px">
+                  <button type="button" class="flow-add-btn" id="btnFlowAddIPad">
+                    ＋ iPad追加
+                  </button>
+                  <button
+                    type="button"
+                    class="flow-add-btn"
+                    id="btnFlowAddIPhone"
+                  >
+                    ＋ iPhone追加
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddDeviceSwitch" style="background-color: #e0f2fe; border-color: #bae6fd; color: #0369a1; display: none;">
+                    ＋ デバイス切替
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddKey">
+                    ＋ KEY追加
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddClick">
+                    ＋ アプリクリック
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddFocus">
+                    ＋ アプリ前面
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddCheck">
+                    ＋ テキスト確認
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddJump">
+                    ＋ ジャンプ
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddStop">
+                    ＋ 停止
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddBTT">
+                    ＋ BTT
+                  </button>
+                  <button type="button" class="flow-add-btn" id="btnFlowAddShortcut">
+                    ＋ ショートカット
+                  </button>
+                </div>
+              </div>
+
+              <div class="row span-2 row-toggle">
+                <label for="enableLoop">実行をループさせる</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="enableLoop" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
 
       <section class="card output-card hidden" id="outputCard">
@@ -298,6 +279,13 @@
                 <input type="checkbox" id="enableExecutionAlert">
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+            <div class="row" style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; border-top: 1px dashed var(--line, #e2e8f0); padding-top: 12px;">
+              <label for="projectPlatformSelect" style="font-weight: bold; color: var(--text-main, #1e293b); font-size: 0.9rem;">ターゲットプラットフォーム</label>
+              <select id="projectPlatformSelect" class="step-input" style="width: 180px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background-color: var(--bg-input, #fff); font-size: 0.85rem; font-family: inherit;">
+                <option value="lua">Lua (Hammerspoon)</option>
+                <option value="js">JS (MultiKeyBoard)</option>
+              </select>
             </div>
           </div>
         </div>

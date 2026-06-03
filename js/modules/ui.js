@@ -432,13 +432,24 @@ function renderStepCard(step, stepNum, isLast = false) {
                     ? "shortcut"
                     : "key";
 
+  const activeProj = state.projects[state.activeProjectId];
+  const currentPlatform = activeProj ? activeProj.platform : "lua";
+  const isUnsupported =
+    (currentPlatform === "lua" && step.kind === "device_switch");
+
+  const unsupportedClass = isUnsupported ? " unsupported" : "";
+  const unsupportedWarning = isUnsupported
+    ? `<span class="unsupported-badge" title="このアクションは現在のターゲットプラットフォーム（${currentPlatform.toUpperCase()}）ではサポートされておらず、スクリプト生成時に無視または警告出力されます">⚠️ 非サポート</span>`
+    : "";
+
   return `
-    <article class="flow-step ${kindClass}${state.selectedStepId === step.id ? " selected" : ""}${isLast ? " is-last" : ""}" draggable="true" data-step-id="${step.id}">
+    <article class="flow-step ${kindClass}${state.selectedStepId === step.id ? " selected" : ""}${isLast ? " is-last" : ""}${unsupportedClass}" draggable="true" data-step-id="${step.id}">
       <div class="flow-step-header">
         <div class="flow-step-title">
           <span class="flow-index">${stepNum}</span>
           ${icon}
           <span class="flow-kind flow-kind-${kindClass}">${badgeLabel}</span>
+          ${unsupportedWarning}
           <input type="text" class="step-title-input" data-field="title" data-step-id="${step.id}" value="${escapeHtml(step.title || "")}" placeholder="アクション名" />
         </div>
         <button type="button" class="icon-btn" data-action="delete" data-step-id="${step.id}" title="削除">
@@ -737,7 +748,7 @@ export function updateProjectTabs(
   onSelect,
   onAdd,
 ) {
-  const container = document.getElementById("projectTabs");
+  const container = document.getElementById("projectSidebarList");
   if (!container || !projects) return;
   container.innerHTML = "";
 
@@ -767,56 +778,85 @@ export function updateProjectTabs(
     const p = projects[id];
     if (!p) return;
 
-    const tab = document.createElement("div");
-    tab.className = `tab${id === activeProjectId ? " active" : ""}`;
-    tab.dataset.id = id;
-    tab.draggable = true;
+    const item = document.createElement("div");
+    item.className = `sidebar-project-item${id === activeProjectId ? " active" : ""}`;
+    item.dataset.id = id;
+    item.draggable = true;
 
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "tab-name";
-    nameSpan.textContent = p.name;
-    nameSpan.title = "ダブルクリックで名前変更";
-    nameSpan.addEventListener("click", () => selectCb(id));
-    nameSpan.addEventListener("dblclick", (e) => {
+    // プロジェクト名とプラットフォームドット
+    const nameContainer = document.createElement("div");
+    nameContainer.className = "sidebar-project-item-name";
+    nameContainer.title = "クリックで読込 / ダブルクリックで名前変更";
+
+    const dot = document.createElement("span");
+    dot.className = `platform-dot ${p.platform || "lua"}`;
+    nameContainer.appendChild(dot);
+
+    const nameText = document.createTextNode(p.name);
+    nameContainer.appendChild(nameText);
+
+    nameContainer.addEventListener("click", () => selectCb(id));
+    nameContainer.addEventListener("dblclick", (e) => {
       e.stopPropagation();
       if (typeof window.renameProject === "function") {
         window.renameProject(id);
       }
     });
+    item.appendChild(nameContainer);
 
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "tab-close";
-    closeBtn.innerHTML = "&times;";
-    closeBtn.title = "削除";
-    closeBtn.addEventListener("click", (e) => {
+    // アクションボタン（複製 & 削除）
+    const actionsContainer = document.createElement("div");
+    actionsContainer.className = "project-item-actions";
+
+    // 複製ボタン
+    const dupBtn = document.createElement("button");
+    dupBtn.type = "button";
+    dupBtn.className = "project-item-action-btn duplicate";
+    dupBtn.title = "プロジェクトを複製";
+    dupBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    dupBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof window.duplicateProject === "function") {
+        window.duplicateProject(id);
+      }
+    });
+    actionsContainer.appendChild(dupBtn);
+
+    // 削除ボタン
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "project-item-action-btn delete";
+    deleteBtn.title = "プロジェクトを削除";
+    deleteBtn.innerHTML = `&times;`;
+    deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (typeof window.deleteProject === "function") {
         window.deleteProject(id);
       }
     });
+    actionsContainer.appendChild(deleteBtn);
 
-    tab.appendChild(nameSpan);
-    tab.appendChild(closeBtn);
+    item.appendChild(actionsContainer);
 
     // ドラッグ＆ドロップのイベント
-    tab.addEventListener("dragstart", (e) => {
+    item.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", id);
-      tab.classList.add("dragging");
+      item.classList.add("dragging");
     });
-    tab.addEventListener("dragover", (e) => {
+    item.addEventListener("dragover", (e) => {
       e.preventDefault();
-      tab.classList.add("drag-over");
+      item.classList.add("drag-over");
     });
-    tab.addEventListener("dragleave", () => {
-      tab.classList.remove("drag-over");
+    item.addEventListener("dragleave", () => {
+      item.classList.remove("drag-over");
     });
-    tab.addEventListener("dragend", () => {
-      tab.classList.remove("dragging");
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
       container
-        .querySelectorAll(".tab")
+        .querySelectorAll(".sidebar-project-item")
         .forEach((t) => t.classList.remove("drag-over"));
     });
-    tab.addEventListener("drop", (e) => {
+    item.addEventListener("drop", (e) => {
       e.preventDefault();
       const draggedId = e.dataTransfer.getData("text/plain");
       if (draggedId !== id && typeof window.reorderProjects === "function") {
@@ -824,15 +864,14 @@ export function updateProjectTabs(
       }
     });
 
-    container.appendChild(tab);
+    container.appendChild(item);
   });
 
-  const addBtn = document.createElement("button");
-  addBtn.className = "tab tab-add";
-  addBtn.innerHTML = "+";
-  addBtn.title = "新規プロジェクト";
-  addBtn.addEventListener("click", addCb);
-  container.appendChild(addBtn);
+  // サイドバー上の追加ボタンにイベントを接続
+  const addBtn = document.getElementById("btnSidebarAddProject");
+  if (addBtn) {
+    addBtn.onclick = addCb;
+  }
 
   // 生成対象プロジェクトのリストも再描画
   updateGenProjectList();
@@ -856,48 +895,125 @@ export function updateAuthUI(user, syncStatus = state.sync.status) {
     return;
   }
 
+  // クラウド同期状態に応じたアイコンと設定
+  const cloudOffSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.14a7 7 0 0 1 14.28 1.13c.27-.06.56-.09.85-.09a5 5 0 0 1 5 5c0 1.25-.46 2.4-1.21 3.29"/><path d="M16 16.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/><path d="M12 13V8"/><path d="M3 3l18 18"/><path d="M20 20a4.5 4.5 0 0 1-8 0"/></svg>`;
+  
+  let cloudSvg = cloudOffSvg;
+  let cloudClass = "cloud-off";
+  let titleText = "クラウド同期未接続（ログインしてください）";
+
   if (user) {
-    // ログイン済み
-    const statusText = syncStatus === 'syncing' ? '同期中...' : (syncStatus === 'error' ? '同期エラー' : '同期済み');
-    const statusClass = syncStatus;
-
-    // 最終同期時刻のフォーマット
-    let lastSyncedText = '';
-    if (state.sync.lastSyncedAt) {
-      const date = new Date(state.sync.lastSyncedAt);
-      lastSyncedText = ` (${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')})`;
+    titleText = "クラウド同期済み";
+    if (syncStatus === 'syncing') {
+      cloudClass = "cloud-syncing";
+      titleText = "同期中...";
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`; // ループ矢印
+    } else if (syncStatus === 'error') {
+      cloudClass = "cloud-error";
+      titleText = "同期エラー";
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 2.5-8.25A7 7 0 1 0 6.5 11.25A4.5 4.5 0 0 0 7.5 19Z"/><path d="m10.11 9.3 6.3 6.3m0-6.3-6.3 6.3"/></svg>`; // エラー雲
+    } else {
+      cloudClass = "cloud-ok";
+      titleText = "同期完了";
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 2.5-8.25A7 7 0 1 0 6.5 11.25A4.5 4.5 0 0 0 7.5 19Z"/><path d="m9 13 2 2 4-4"/></svg>`; // チェック雲
     }
+  }
 
-    container.innerHTML = `
-      <div class="user-profile">
-        <img src="${user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'}" class="user-avatar" alt="Avatar">
-        <div style="display: flex; flex-direction: column;">
-          <span class="user-name">${escapeHtml(user.displayName || 'User')}</span>
-          <div class="sync-status ${statusClass}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-            ${statusText}${lastSyncedText}
+  // アカウントステータス情報
+  const accountStatusText = user ? "Account Status" : "Not Signed In";
+  const accountName = user ? (user.displayName || user.email) : "未ログイン";
+  const userPhoto = user ? user.photoURL : "";
+
+  // 最終同期時刻
+  let lastSyncedText = '';
+  if (user && state.sync.lastSyncedAt) {
+    const date = new Date(state.sync.lastSyncedAt);
+    lastSyncedText = `同期: ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  } else if (user) {
+    lastSyncedText = '未同期';
+  } else {
+    lastSyncedText = 'ログインしてデータを同期';
+  }
+
+  // アクションボタンとガイドテキスト
+  const actionButton = user 
+    ? `<button id="btnAuthLogout" class="auth-popover-btn logout">
+         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+         <span>ログアウト</span>
+       </button>`
+    : `<button id="btnAuthLogin" class="auth-popover-btn login">
+         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+         <span>Google ログイン</span>
+       </button>`;
+
+  const guideText = user
+    ? `<div class="auth-popover-guide">
+         <p>プロジェクトは自動的に<br>クラウドへ同期されます</p>
+       </div>`
+    : "";
+
+  container.innerHTML = `
+    <div class="auth-container" id="authContainer">
+      <button type="button" class="auth-cloud-btn ${cloudClass}" id="authCloudBtn" title="${titleText}">
+        ${cloudSvg}
+      </button>
+      
+      <div class="auth-popover hidden" id="authPopover">
+        <div class="auth-popover-header">
+          <div class="auth-popover-user">
+            ${userPhoto 
+              ? `<img src="${userPhoto}" class="auth-popover-avatar" alt="Avatar">` 
+              : `<div class="auth-popover-avatar-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>`
+            }
+            <div class="auth-popover-info">
+              <span class="auth-popover-status">${accountStatusText}</span>
+              <span class="auth-popover-name" title="${escapeHtml(accountName)}">${escapeHtml(accountName)}</span>
+              <span class="auth-popover-sync-time">${lastSyncedText}</span>
+            </div>
           </div>
         </div>
+        <div class="auth-popover-body">
+          ${actionButton}
+        </div>
+        ${guideText}
       </div>
-      <button class="btn-ghost btn-small" id="btnLogout">ログアウト</button>
-    `;
+    </div>
+  `;
 
-    document.getElementById('btnLogout').onclick = () => {
-      if (confirm('ログアウトしますか？')) {
-        window.handleLogout();
+  // ポップオーバーのトグル処理
+  const btn = document.getElementById("authCloudBtn");
+  const popover = document.getElementById("authPopover");
+  if (btn && popover) {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const isOpen = !popover.classList.contains("hidden");
+      if (isOpen) {
+        popover.classList.add("hidden");
+        btn.classList.remove("active");
+      } else {
+        popover.classList.remove("hidden");
+        btn.classList.add("active");
       }
     };
-  } else {
-    // 未ログイン
-    container.innerHTML = `
-      <button class="btn-google btn-small" id="btnLogin">
-        ${icons.google}
-        Googleでログイン
-      </button>
-    `;
+  }
 
-    document.getElementById('btnLogin').onclick = () => {
-      window.handleLogin();
+  // ログイン処理バインド
+  const loginBtn = document.getElementById("btnAuthLogin");
+  if (loginBtn) {
+    loginBtn.onclick = () => {
+      if (typeof window.handleLogin === "function") {
+        window.handleLogin();
+      }
+    };
+  }
+
+  // ログアウト処理バインド
+  const logoutBtn = document.getElementById("btnAuthLogout");
+  if (logoutBtn) {
+    logoutBtn.onclick = () => {
+      if (typeof window.handleLogout === "function") {
+        window.handleLogout();
+      }
     };
   }
 }
@@ -975,4 +1091,16 @@ export function updateGenProjectList() {
 
   container.innerHTML = html;
 }
+
+// ポップオーバー以外の場所をクリックしたときにポップオーバーを閉じる処理
+document.addEventListener("click", (e) => {
+  const popover = document.getElementById("authPopover");
+  const btn = document.getElementById("authCloudBtn");
+  if (!popover || !btn) return;
+  
+  if (!btn.contains(e.target) && !popover.contains(e.target)) {
+    popover.classList.add("hidden");
+    btn.classList.remove("active");
+  }
+});
 

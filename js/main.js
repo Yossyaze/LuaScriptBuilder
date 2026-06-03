@@ -129,25 +129,29 @@ function applyState(newState) {
 
 window.syncPlatformUI = function(platform) {
   const isJs = platform === "js";
+  document.body.setAttribute("data-platform", platform);
   
   // 生成対象言語のラジオボタンの選択状態を同期
   const radio = document.querySelector(`input[name="genLanguage"][value="${platform}"]`);
   if (radio) radio.checked = true;
   updateGenProjectList();
+
+  // 設定サイドパネル内のプラットフォーム切り替えセレクトボックスの選択状態を同期
+  const select = document.getElementById("projectPlatformSelect");
+  if (select) select.value = platform;
   
   // 表示・非表示にするアクション追加ボタンの制御
-  const jsOnlyButtons = ["btnFlowAddDeviceSwitch"];
-  const luaOnlyButtons = ["btnFlowAddBTT"];
+  // デバイス切替 (device_switch) は JS (MultiKeyBoard) でのみサポートされるため、Lua の時は非表示にする
+  const deviceSwitchBtn = document.getElementById("btnFlowAddDeviceSwitch");
+  if (deviceSwitchBtn) {
+    deviceSwitchBtn.style.display = isJs ? "flex" : "none";
+  }
   
-  jsOnlyButtons.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isJs ? "flex" : "none";
-  });
-  
-  luaOnlyButtons.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isJs ? "none" : "flex";
-  });
+  // BTT (btt) は Lua と JS 両方でサポートされるようになったため、常に表示する
+  const bttBtn = document.getElementById("btnFlowAddBTT");
+  if (bttBtn) {
+    bttBtn.style.display = "flex";
+  }
   
   // 設定項目の制御 (Luaの再読込・一括停止、開始・停止ホットキーはJSモード時は隠す)
   const recordBtns = document.querySelectorAll(".hotkey-controls");
@@ -162,13 +166,13 @@ window.syncPlatformUI = function(platform) {
     }
   });
   
-  // 待機時間設定のうち、JS非対応のアクション待機時間を隠す
+  // 待機時間設定のうち、BTT用待機時間はLuaとJSの両対応になったので、常に表示する
   const luaOnlyWaitSettings = ["waitBtt"];
   luaOnlyWaitSettings.forEach(id => {
     const el = document.getElementById(id);
     const row = el?.closest(".row");
     if (row) {
-      row.style.display = isJs ? "none" : "flex";
+      row.style.display = "flex";
     }
   });
 
@@ -245,6 +249,11 @@ window.loadProjectState = function(projectId) {
     });
   }
   syncGlobalSettingsToUI();
+  
+  const activeNameDisp = document.getElementById("activeProjectNameDisplay");
+  if (activeNameDisp) {
+    activeNameDisp.textContent = p.name;
+  }
   
   updateProjectTabs();
   renderHotkeys();
@@ -403,25 +412,30 @@ function countStepsByKind(steps, kind) {
   return count;
 }
 
-window.switchProjectPlatform = function(projectId = state.activeProjectId) {
+window.switchProjectPlatform = function(nextPlatform, projectId = state.activeProjectId) {
   const p = state.projects[projectId];
   if (!p) return;
 
+  if (p.platform === nextPlatform) return;
+
   flushActiveProject();
-  const currentPlatform = p.platform === "js" ? "js" : "lua";
-  const nextPlatform = currentPlatform === "js" ? "lua" : "js";
-  const unsupportedCount = nextPlatform === "js"
-    ? countStepsByKind(p.flowSteps, "btt")
-    : countStepsByKind(p.flowSteps, "device_switch");
+  // Luaに切り替える時だけ、デバイス切替 (device_switch) が非サポートになる
+  const unsupportedCount = nextPlatform === "lua"
+    ? countStepsByKind(p.flowSteps, "device_switch")
+    : 0;
 
   if (unsupportedCount > 0) {
-    const unsupportedName = nextPlatform === "js" ? "BTT" : "デバイス切替";
     const ok = confirm(
-      `${unsupportedName}ステップが${unsupportedCount}個あります。\n` +
-      `切り替えても削除はしませんが、${nextPlatform === "js" ? "JS" : "Lua"}では未対応として扱われます。\n\n` +
+      `デバイス切替ステップが${unsupportedCount}個あります。\n` +
+      `切り替えても削除はしませんが、Lua (Hammerspoon) では非サポートとなり警告表示されます。\n\n` +
       "切り替えますか？"
     );
-    if (!ok) return;
+    if (!ok) {
+      // キャンセルされた場合、セレクトボックスの選択を元のプラットフォーム値に戻す
+      const select = document.getElementById("projectPlatformSelect");
+      if (select) select.value = p.platform;
+      return;
+    }
   }
 
   saveHistory();
@@ -444,6 +458,14 @@ window.renameProject = function(projectId) {
   if (name) {
     saveHistory();
     p.name = name;
+    
+    if (projectId === state.activeProjectId) {
+      const activeNameDisp = document.getElementById("activeProjectNameDisplay");
+      if (activeNameDisp) {
+        activeNameDisp.textContent = name;
+      }
+    }
+    
     updateProjectTabs();
     saveToStorage();
   }
@@ -1164,34 +1186,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  document.getElementById("btnRenameProject").onclick = () => {
-    window.renameProject(state.activeProjectId);
-  };
-
-  document.getElementById("btnSwitchProjectPlatform").onclick = () => {
-    window.switchProjectPlatform(state.activeProjectId);
-  };
-
-  document.getElementById("btnDuplicateProject").onclick = () => {
-    if (!state.activeProjectId || !state.projects[state.activeProjectId]) return;
-    flushActiveProject();
-    const p = state.projects[state.activeProjectId];
-    const newId = "proj-" + Date.now();
-    state.projects[newId] = JSON.parse(JSON.stringify(p));
-    state.projects[newId].id = newId;
-    state.projects[newId].name += " (コピー)";
-    
-    // 表示順序リストにも追加
-    state.projectOrder.push(newId);
-    
-    saveHistory();
-    window.loadProjectState(newId);
-    saveToStorage();
-  };
-
-  document.getElementById("btnDeleteProject").onclick = () => {
-    window.deleteProject(state.activeProjectId);
-  };
 
   document.getElementById("btnExport").onclick = () => {
     window.exportAllData();
@@ -1760,7 +1754,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // --- 設定サイドパネルのイベント処理 ---
+  // --- 設定サイドパネル의 イベント処理 ---
   const btnOpenSettings = document.getElementById("btnOpenSettings");
   if (btnOpenSettings) {
     btnOpenSettings.onclick = () => {
@@ -1774,6 +1768,14 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCloseSettings.onclick = () => {
       const panel = document.getElementById("settingsPanel");
       if (panel) panel.classList.add("hidden");
+    };
+  }
+
+  const projectPlatformSelect = document.getElementById("projectPlatformSelect");
+  if (projectPlatformSelect) {
+    projectPlatformSelect.onchange = (e) => {
+      const nextPlatform = e.target.value;
+      window.switchProjectPlatform(nextPlatform);
     };
   }
 });
