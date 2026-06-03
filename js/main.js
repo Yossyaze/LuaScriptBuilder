@@ -259,6 +259,59 @@ window.loadProjectState = function(projectId) {
   renderHotkeys();
   refreshFlowViews();
   setStatus(`プロジェクト「${p.name}」を読み込みました`);
+  // プロジェクト読み込み時にスクリプトも自動生成する
+  if (typeof window.autoGenerateScript === "function") {
+    window.autoGenerateScript();
+  }
+};
+
+/**
+ * 現在設定されているプロジェクト・言語のスクリプトを自動生成して出力エリアに反映する
+ */
+window.autoGenerateScript = function() {
+  const card = document.getElementById("outputCard");
+  // 出力カードが非表示の場合は無駄な生成処理をスキップする
+  if (card && card.classList.contains("hidden")) {
+    return;
+  }
+
+  try {
+    const langRadio = document.querySelector('input[name="genLanguage"]:checked');
+    if (!langRadio) return;
+    const lang = langRadio.value;
+    const isJs = lang === "js";
+    
+    // 選択されているプロジェクトIDの取得
+    const selectedEls = document.querySelectorAll('input[name="genProjects"]:checked');
+    const selectedIds = Array.from(selectedEls).map(el => el.value);
+    
+    // プロジェクトが何もチェックされていない場合は、現在のアクティブなプロジェクトをチェックする
+    if (selectedIds.length === 0) {
+      const activeCheckbox = document.querySelector(`input[name="genProjects"][value="${state.activeProjectId}"]`);
+      if (activeCheckbox) {
+        activeCheckbox.checked = true;
+        selectedIds.push(state.activeProjectId);
+      } else {
+        const output = document.getElementById("output");
+        if (output) output.value = "";
+        return;
+      }
+    }
+    
+    let generatedCode = "";
+    if (isJs) {
+      generatedCode = generateJavascript(selectedIds[0]);
+    } else {
+      generatedCode = generateLua(selectedIds);
+    }
+    
+    const output = document.getElementById("output");
+    if (output) {
+      output.value = generatedCode;
+    }
+  } catch (e) {
+    console.error("自動生成エラー:", e.message);
+  }
 };
 
 let refreshTimeout = null;
@@ -269,6 +322,10 @@ window.refreshFlowViews = function() {
     // クラウドデータ適用中（同期中）は保存を走らせない
     if (!state.sync.isApplyingCloudData) {
       saveToStorage();
+    }
+    // フロー更新時にスクリプトも自動生成する
+    if (typeof window.autoGenerateScript === "function") {
+      window.autoGenerateScript();
     }
     refreshTimeout = null;
   }, 10);
@@ -1041,12 +1098,13 @@ document.addEventListener("DOMContentLoaded", () => {
           : (isJs ? "生成JSを隠す" : "生成Luaを隠す");
       }
       
-      // 出力エリアをリセット
-      const output = document.getElementById("output");
-      if (output) output.value = "";
-      
       // プロジェクト一覧を再描画
       updateGenProjectList();
+      
+      // 言語切り替え時に自動生成を行う
+      if (typeof window.autoGenerateScript === "function") {
+        window.autoGenerateScript();
+      }
     });
   });
 
@@ -1183,6 +1241,10 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("btnToggleOutput").textContent = isJs ? "生成JSを表示" : "生成Luaを表示";
     } else {
       document.getElementById("btnToggleOutput").textContent = isJs ? "生成JSを隠す" : "生成Luaを隠す";
+      // 表示された瞬間に自動生成を行う
+      if (typeof window.autoGenerateScript === "function") {
+        window.autoGenerateScript();
+      }
     }
   };
 
@@ -1778,6 +1840,13 @@ document.addEventListener("DOMContentLoaded", () => {
       window.switchProjectPlatform(nextPlatform);
     };
   }
+
+  // 生成対象プロジェクトのチェック状態が変更された際も自動生成を実行
+  document.getElementById("genProjectList")?.addEventListener("change", () => {
+    if (typeof window.autoGenerateScript === "function") {
+      window.autoGenerateScript();
+    }
+  });
 });
 
 // ==========================================
