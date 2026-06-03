@@ -1333,3 +1333,16 @@
         line-height: 1.3;
       }
 
+      /* ロゴマーク表示用のスタイル */
+      .logo-icon {
+        display: inline-block;
+        vertical-align: middle;
+        flex-shrink: 0;
+      }
+      .logo-icon.lua {
+        color: #002040; /* Luaメインネイビー */
+      }
+      .logo-icon.js {
+        color: #f7df1e; /* JSブランドイエロー */
+      }
+
