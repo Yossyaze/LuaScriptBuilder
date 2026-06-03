@@ -750,8 +750,12 @@ export function updateProjectTabs(
   const addCb =
     onAdd ||
     (() => {
-      const name = prompt("新しいプロジェクト名", "New Project");
-      if (name) window.createNewProject(name);
+      if (typeof window.openNewProjectModal === "function") {
+        window.openNewProjectModal();
+      } else {
+        const name = prompt("新しいプロジェクト名", "New Project");
+        if (name) window.createNewProject(name);
+      }
     });
 
   // プロジェクトの順序が未設定の場合は、現在のキーから作成

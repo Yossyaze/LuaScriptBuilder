@@ -364,10 +364,7 @@ function renderPresetsList(stepId) {
 
 // --- Core Logic ---
 
-window.createNewProject = function(name) {
-  const isJs = confirm("MultiKeyBoard (JS) 用のプロジェクトにしますか？\n（[キャンセル] を選ぶと Hammerspoon (Lua) 用になります）");
-  const platform = isJs ? "js" : "lua";
-  
+window.createNewProject = function(name, platform = "lua") {
   const id = "proj-" + Date.now();
   state.projects[id] = {
     id,
@@ -1678,6 +1675,107 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   refreshFlowViews();
+
+  // --- 新規プロジェクトモーダルのイベント処理 ---
+  window.openNewProjectModal = function() {
+    const modal = document.getElementById("newProjectModal");
+    const input = document.getElementById("newProjectName");
+    if (modal && input) {
+      input.value = "";
+      // プラットフォーム選択をデフォルト(Lua)に戻す
+      const luaRadio = document.querySelector('input[name="newProjectPlatform"][value="lua"]');
+      if (luaRadio) {
+        luaRadio.checked = true;
+        
+        // 視覚的カードのアクティブ化状態の初期化
+        const luaCard = document.getElementById("cardPlatformLua");
+        const jsCard = document.getElementById("cardPlatformJs");
+        if (luaCard && jsCard) {
+          luaCard.classList.add("active");
+          luaCard.style.borderColor = "#10b981";
+          luaCard.style.background = "#f0fdf4";
+          
+          jsCard.classList.remove("active");
+          jsCard.style.borderColor = "#e2e8f0";
+          jsCard.style.background = "var(--surface, #fff)";
+        }
+      }
+      modal.classList.remove("hidden");
+      input.focus();
+    }
+  };
+
+  // プラットフォームカードのクリック連動
+  const setupPlatformCard = (value, cardId, activeBorder, activeBg) => {
+    const card = document.getElementById(cardId);
+    if (card) {
+      card.onclick = () => {
+        const radio = document.querySelector(`input[name="newProjectPlatform"][value="${value}"]`);
+        if (radio) radio.checked = true;
+        
+        // すべてのカードを非アクティブ化
+        document.querySelectorAll(".platform-card").forEach(c => {
+          c.classList.remove("active");
+          c.style.borderColor = "#e2e8f0";
+          c.style.background = "var(--surface, #fff)";
+        });
+        
+        // クリックしたカードをアクティブ化
+        card.classList.add("active");
+        card.style.borderColor = activeBorder;
+        card.style.background = activeBg;
+      };
+    }
+  };
+  setupPlatformCard("lua", "cardPlatformLua", "#10b981", "#f0fdf4");
+  setupPlatformCard("js", "cardPlatformJs", "#0284c7", "#f0f9ff");
+
+  const closeNewProjectModal = () => {
+    const modal = document.getElementById("newProjectModal");
+    if (modal) modal.classList.add("hidden");
+  };
+
+  const btnCancel = document.getElementById("btnCancelNewProject");
+  const btnCancelX = document.getElementById("btnCancelNewProjectX");
+  if (btnCancel) btnCancel.onclick = closeNewProjectModal;
+  if (btnCancelX) btnCancelX.onclick = closeNewProjectModal;
+  
+  const btnConfirm = document.getElementById("btnConfirmNewProject");
+  if (btnConfirm) {
+    btnConfirm.onclick = () => {
+      const input = document.getElementById("newProjectName");
+      const name = input ? input.value.trim() : "";
+      if (!name) {
+        alert("プロジェクト名を入力してください。");
+        if (input) input.focus();
+        return;
+      }
+      
+      const checkedPlatform = document.querySelector('input[name="newProjectPlatform"]:checked');
+      const platform = checkedPlatform ? checkedPlatform.value : "lua";
+      
+      saveHistory();
+      window.createNewProject(name, platform);
+      closeNewProjectModal();
+    };
+  }
+
+  // --- 設定サイドパネルのイベント処理 ---
+  const btnOpenSettings = document.getElementById("btnOpenSettings");
+  if (btnOpenSettings) {
+    btnOpenSettings.onclick = () => {
+      const panel = document.getElementById("settingsPanel");
+      if (panel) panel.classList.remove("hidden");
+    };
+  }
+
+  const btnCloseSettings = document.getElementById("btnCloseSettings");
+  if (btnCloseSettings) {
+    btnCloseSettings.onclick = () => {
+      const panel = document.getElementById("settingsPanel");
+      if (panel) panel.classList.add("hidden");
+    };
+  }
 });
 
 // ==========================================
