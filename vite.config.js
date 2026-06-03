@@ -176,6 +176,51 @@ if let bitmapRep = NSBitmapImageRep(
               res.writeHead(500);
               res.end();
             }
+          } else if (req.url === '/api/update' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+              try {
+                const homeDir = process.env.HOME || process.env.USERPROFILE;
+                const initPath = path.join(homeDir, '.hammerspoon', 'init.lua');
+                const parentDir = path.dirname(initPath);
+                if (!fs.existsSync(parentDir)) {
+                  fs.mkdirSync(parentDir, { recursive: true });
+                }
+                fs.writeFileSync(initPath, body, 'utf8');
+                
+                // Hammerspoon が起動している場合は AppleScript で hs.reload() を実行
+                exec(`osascript -e 'tell application "Hammerspoon" to execute "hs.reload()"'`, (err) => {});
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+              } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+              }
+            });
+          } else if (req.url === '/api/update-js' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+              try {
+                const projName = decodeURIComponent(req.headers['x-project-name'] || 'lsb_macro')
+                  .replace(/[\s/\\?%*:|"<>\s]/g, '_');
+                const homeDir = process.env.HOME || process.env.USERPROFILE;
+                const mkDir = path.join(homeDir, '.config', 'MultiKeyBoard', 'scripts');
+                if (!fs.existsSync(mkDir)) {
+                  fs.mkdirSync(mkDir, { recursive: true });
+                }
+                const jsPath = path.join(mkDir, `${projName}.js`);
+                fs.writeFileSync(jsPath, body, 'utf8');
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+              } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+              }
+            });
           } else {
             next();
           }

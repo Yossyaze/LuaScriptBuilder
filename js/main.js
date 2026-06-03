@@ -13,7 +13,8 @@ import {
   setStatus,
   hotkeyToDisplay,
   keyToDisplay,
-  setupAddStepButtons
+  setupAddStepButtons,
+  updateGenProjectList
 } from './modules/ui.js';
 import { updateMermaidGraph } from './modules/flowchart.js';
 import { HistoryManager } from './modules/history.js';
@@ -129,6 +130,11 @@ function applyState(newState) {
 window.syncPlatformUI = function(platform) {
   const isJs = platform === "js";
   
+  // 生成対象言語のラジオボタンの選択状態を同期
+  const radio = document.querySelector(`input[name="genLanguage"][value="${platform}"]`);
+  if (radio) radio.checked = true;
+  updateGenProjectList();
+  
   // 表示・非表示にするアクション追加ボタンの制御
   const jsOnlyButtons = ["btnFlowAddDeviceSwitch"];
   const luaOnlyButtons = ["btnFlowAddBTT"];
@@ -173,6 +179,14 @@ window.syncPlatformUI = function(platform) {
     badge.style.backgroundColor = isJs ? "var(--clr-device-switch-bg)" : "var(--clr-key-bg)";
     badge.style.color = isJs ? "var(--clr-device-switch-ink)" : "var(--clr-key-ink)";
     badge.style.border = isJs ? "1px solid var(--clr-device-switch-line)" : "1px solid var(--clr-key-line)";
+  }
+
+  const switchBtn = document.getElementById("btnSwitchProjectPlatform");
+  if (switchBtn) {
+    switchBtn.textContent = isJs ? "Luaへ切替" : "JSへ切替";
+    switchBtn.title = isJs
+      ? "このプロジェクトをHammerspoon向けに切り替えます"
+      : "このプロジェクトをMultiKeyBoard向けに切り替えます";
   }
   
   // 出力系のラベル・アクションボタンのテキストと表示切り替え
@@ -378,6 +392,52 @@ window.createNewProject = function(name) {
   };
   state.projectOrder.push(id);
   window.loadProjectState(id);
+};
+
+function countStepsByKind(steps, kind) {
+  let count = 0;
+  (steps || []).forEach((step) => {
+    if (step.kind === kind) count += 1;
+    if (step.kind === "check") {
+      count += countStepsByKind(step.okBranch || [], kind);
+      count += countStepsByKind(step.ngBranch || [], kind);
+    }
+  });
+  return count;
+}
+
+window.switchProjectPlatform = function(projectId = state.activeProjectId) {
+  const p = state.projects[projectId];
+  if (!p) return;
+
+  flushActiveProject();
+  const currentPlatform = p.platform === "js" ? "js" : "lua";
+  const nextPlatform = currentPlatform === "js" ? "lua" : "js";
+  const unsupportedCount = nextPlatform === "js"
+    ? countStepsByKind(p.flowSteps, "btt")
+    : countStepsByKind(p.flowSteps, "device_switch");
+
+  if (unsupportedCount > 0) {
+    const unsupportedName = nextPlatform === "js" ? "BTT" : "デバイス切替";
+    const ok = confirm(
+      `${unsupportedName}ステップが${unsupportedCount}個あります。\n` +
+      `切り替えても削除はしませんが、${nextPlatform === "js" ? "JS" : "Lua"}では未対応として扱われます。\n\n` +
+      "切り替えますか？"
+    );
+    if (!ok) return;
+  }
+
+  saveHistory();
+  p.platform = nextPlatform;
+  window.syncPlatformUI(nextPlatform);
+  updateProjectTabs();
+  refreshFlowViews();
+
+  const output = document.getElementById("output");
+  if (output) output.value = "";
+
+  saveToStorage();
+  setStatus(`${p.name} を ${nextPlatform === "js" ? "JS" : "Lua"} 用に切り替えました`);
 };
 
 window.renameProject = function(projectId) {
@@ -932,28 +992,94 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Event Listeners for Static Elements
 
+  // 言語選択（Lua/JS）ラジオボタン変更時のハンドラー
+  document.querySelectorAll('input[name="genLanguage"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const isJs = e.target.value === 'js';
+      
+      const outputLabel = document.getElementById("outputLabel");
+      if (outputLabel) {
+        outputLabel.textContent = isJs ? "生成されたJS" : "生成されたLua";
+      }
+      
+      const downloadBtn = document.getElementById("btnDownload");
+      if (downloadBtn) {
+        downloadBtn.textContent = isJs ? "保存 (script.js)" : "保存 (init.lua)";
+      }
+      
+      const sendBtn = document.getElementById("btnSendToHammerspoon");
+      if (sendBtn) {
+        sendBtn.textContent = isJs ? "MultiKeyBoardに送信" : "Hammerspoonに送信";
+        sendBtn.style.backgroundColor = isJs ? "#0284c7" : "#10b981";
+      }
+      
+      const toggleBtn = document.getElementById("btnToggleOutput");
+      const card = document.getElementById("outputCard");
+      if (toggleBtn && card) {
+        const isHidden = card.classList.contains("hidden");
+        toggleBtn.textContent = isHidden
+          ? (isJs ? "生成JSを表示" : "生成Luaを表示")
+          : (isJs ? "生成JSを隠す" : "生成Luaを隠す");
+      }
+      
+      // 出力エリアをリセット
+      const output = document.getElementById("output");
+      if (output) output.value = "";
+      
+      // プロジェクト一覧を再描画
+      updateGenProjectList();
+    });
+  });
+
   document.getElementById("btnGenerate").onclick = () => {
     try {
-      const p = state.projects[state.activeProjectId];
-      const isJs = p && p.platform === "js";
-      document.getElementById("output").value = isJs ? generateJavascript() : generateLua();
+      const lang = document.querySelector('input[name="genLanguage"]:checked').value;
+      const isJs = lang === "js";
+      
+      // 選択されているプロジェクトIDの取得
+      const selectedEls = document.querySelectorAll('input[name="genProjects"]:checked');
+      const selectedIds = Array.from(selectedEls).map(el => el.value);
+      
+      if (selectedIds.length === 0) {
+        throw new Error("生成対象のプロジェクトを選択してください。");
+      }
+      
+      let generatedCode = "";
+      if (isJs) {
+        // JSは単一選択なので最初のものを対象とする
+        generatedCode = generateJavascript(selectedIds[0]);
+      } else {
+        // Luaは複数選択を結合する
+        generatedCode = generateLua(selectedIds);
+      }
+      
+      document.getElementById("output").value = generatedCode;
       setStatus(isJs ? "JSを生成しました" : "Luaを生成しました");
-    } catch (e) { setStatus(e.message); }
+    } catch (e) { setStatus(e.message, true); }
   };
 
   document.getElementById("btnCopy").onclick = async () => {
     const out = document.getElementById("output").value;
-    if (!out) return setStatus("先に生成してください");
+    if (!out) return setStatus("先に生成してください", true);
     await navigator.clipboard.writeText(out);
     setStatus("コピーしました");
   };
 
   document.getElementById("btnDownload").onclick = () => {
     const out = document.getElementById("output").value;
-    if (!out) return setStatus("先に生成してください");
-    const p = state.projects[state.activeProjectId];
-    const isJs = p && p.platform === "js";
-    const filename = isJs ? (p.name ? p.name.replace(/[\s/\\?%*:|"<>\s]/g, "_") + ".js" : "script.js") : "init.lua";
+    if (!out) return setStatus("先に生成してください", true);
+    
+    const lang = document.querySelector('input[name="genLanguage"]:checked').value;
+    const isJs = lang === "js";
+    
+    let filename = "init.lua";
+    if (isJs) {
+      const selectedEl = document.querySelector('input[name="genProjects"]:checked');
+      const projId = selectedEl ? selectedEl.value : state.activeProjectId;
+      const p = state.projects[projId];
+      filename = p && p.name ? p.name.replace(/[\s/\\?%*:|"<>\s]/g, "_") + ".js" : "script.js";
+    }
+    
     const blob = new Blob([out], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -963,12 +1089,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btnSendToHammerspoon").onclick = async () => {
     let out = document.getElementById("output").value;
-    const p = state.projects[state.activeProjectId];
-    const isJs = p && p.platform === "js";
+    const lang = document.querySelector('input[name="genLanguage"]:checked').value;
+    const isJs = lang === "js";
+    
+    // 選択されているプロジェクトIDの取得
+    const selectedEls = document.querySelectorAll('input[name="genProjects"]:checked');
+    const selectedIds = Array.from(selectedEls).map(el => el.value);
+    
+    if (selectedIds.length === 0) {
+      return setStatus("対象のプロジェクトを選択してください", true);
+    }
     
     if (!out) {
       try {
-        out = isJs ? generateJavascript() : generateLua();
+        if (isJs) {
+          out = generateJavascript(selectedIds[0]);
+        } else {
+          out = generateLua(selectedIds);
+        }
         document.getElementById("output").value = out;
         setStatus(isJs ? "JSを自動生成しました" : "Luaを自動生成しました");
       } catch (e) {
@@ -984,12 +1122,14 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus(isJs ? "MultiKeyBoardへ設定を送信中..." : "Hammerspoonへ設定を送信中...");
 
     try {
-      const endpoint = isJs ? "http://127.0.0.1:27312/update-js" : "http://127.0.0.1:27312/update";
+      // 送信先をVite開発サーバーのローカルAPIに変更
+      const endpoint = isJs ? "/api/update-js" : "/api/update";
       const headers = {
         "Content-Type": "text/plain"
       };
       if (isJs) {
-        headers["X-Project-Name"] = encodeURIComponent(p.name || "lsb_macro");
+        const p = state.projects[selectedIds[0]];
+        headers["X-Project-Name"] = encodeURIComponent(p ? p.name : "lsb_macro");
       }
 
       const response = await fetch(endpoint, {
@@ -999,16 +1139,16 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       if (response.ok) {
-        setStatus(isJs ? "MultiKeyBoardのJSスクリプトを直接更新しました！" : "Hammerspoonの設定を直接更新し、リロードしました！");
+        setStatus(isJs ? "MultiKeyBoardのJSスクリプトを保存しました！" : "Hammerspoonの設定を保存し、リロードしました！");
       } else {
         const errText = await response.text();
-        throw new Error(errText || "サーバーエラーが発生しました");
+        throw new Error(errText || "サーバー保存エラーが発生しました");
       }
     } catch (e) {
       console.error(e);
       setStatus(isJs 
-        ? "送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください" 
-        : "送信失敗: Hammerspoonが起動しているか、または受信設定がされているか確認してください", true);
+        ? "送信失敗: 保存先フォルダが存在するか、またはViteサーバーの接続を確認してください" 
+        : "送信失敗: .hammerspoonフォルダが存在するか、またはViteサーバーの接続を確認してください", true);
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
@@ -1018,8 +1158,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnToggleOutput").onclick = () => {
     const card = document.getElementById("outputCard");
     card.classList.toggle("hidden");
-    const p = state.projects[state.activeProjectId];
-    const isJs = p && p.platform === "js";
+    const lang = document.querySelector('input[name="genLanguage"]:checked').value;
+    const isJs = lang === "js";
     if (card.classList.contains("hidden")) {
       document.getElementById("btnToggleOutput").textContent = isJs ? "生成JSを表示" : "生成Luaを表示";
     } else {
@@ -1029,6 +1169,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btnRenameProject").onclick = () => {
     window.renameProject(state.activeProjectId);
+  };
+
+  document.getElementById("btnSwitchProjectPlatform").onclick = () => {
+    window.switchProjectPlatform(state.activeProjectId);
   };
 
   document.getElementById("btnDuplicateProject").onclick = () => {
@@ -1563,4 +1707,3 @@ window.isFavoriteDevice = function(deviceName) {
 window.getFavoriteDevices = function() {
   return state.globalSettings.favoriteDevices || [];
 };
-

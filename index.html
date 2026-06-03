@@ -73,6 +73,9 @@
       >
         <div id="projectPlatformBadge" class="flow-kind" style="font-size: 0.82rem; padding: 4px 12px; font-weight: bold; border-radius: 6px; letter-spacing: 0.05em; display: inline-flex; align-items: center;"></div>
         <div style="display: flex; gap: 8px;">
+          <button id="btnSwitchProjectPlatform" class="btn-ghost btn-small">
+            JSへ切替
+          </button>
           <button id="btnRenameProject" class="btn-ghost btn-small">
             現在の名前を変更
           </button>
@@ -477,8 +480,26 @@
       </div>
 
       <section class="card output-card hidden" id="outputCard">
+        <!-- 生成対象言語とプロジェクトの複数選択コントロール -->
+        <div class="generation-controls" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <span style="font-weight: bold; font-size: 0.9rem; color: var(--text-color, #1e293b);">生成対象言語:</span>
+            <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; color: var(--text-color, #334155);">
+              <input type="radio" name="genLanguage" value="lua" checked style="width: auto; margin: 0;" /> Lua (Hammerspoon)
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; color: var(--text-color, #334155);">
+              <input type="radio" name="genLanguage" value="js" style="width: auto; margin: 0;" /> JS (MultiKeyBoard)
+            </label>
+          </div>
+          <div id="genProjectSelectContainer" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-weight: bold; font-size: 0.9rem; color: var(--text-color, #1e293b);">生成対象プロジェクト:</span>
+            <div id="genProjectList" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 5px 0;">
+              <!-- プロジェクトリストが動的に挿入されます -->
+            </div>
+          </div>
+        </div>
         <div class="row">
-          <label for="output">生成されたLua</label>
+          <label for="output" id="outputLabel">生成されたLua</label>
           <textarea id="output" spellcheck="false"></textarea>
         </div>
       </section>

@@ -829,6 +829,9 @@ export function updateProjectTabs(
   addBtn.title = "新規プロジェクト";
   addBtn.addEventListener("click", addCb);
   container.appendChild(addBtn);
+
+  // 生成対象プロジェクトのリストも再描画
+  updateGenProjectList();
 }
 
 /**
@@ -923,5 +926,49 @@ export function setStatus(msg, isError = false) {
   statusTimeout = setTimeout(() => {
     el.classList.remove("show");
   }, 3000);
+}
+
+/**
+ * 出力カード上部に表示する、生成対象プロジェクトの一覧を描画する
+ */
+export function updateGenProjectList() {
+  const container = document.getElementById("genProjectList");
+  if (!container) return;
+
+  const langRadio = document.querySelector('input[name="genLanguage"]:checked');
+  const lang = langRadio ? langRadio.value : 'lua';
+
+  const filteredProjects = Object.values(state.projects).filter(p => p.platform === lang);
+
+  if (filteredProjects.length === 0) {
+    container.innerHTML = `<span style="font-size: 0.85rem; color: var(--text-secondary, #666);">対象のプロジェクトがありません。</span>`;
+    return;
+  }
+
+  let html = '';
+  if (lang === 'lua') {
+    // Luaの場合は複数選択可能（チェックボックス、デフォルト全選択）
+    filteredProjects.forEach(p => {
+      html += `
+        <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; background: var(--bg-card, #f8fafc); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); color: var(--text-color, #334155);">
+          <input type="checkbox" name="genProjects" value="${p.id}" checked style="width: auto; margin: 0;" />
+          ${escapeHtml(p.name)}
+        </label>
+      `;
+    });
+  } else {
+    // JSの場合は単一選択（ラジオボタン、デフォルトはアクティブプロジェクト優先）
+    filteredProjects.forEach(p => {
+      const isSelected = p.id === state.activeProjectId || filteredProjects[0].id === p.id;
+      html += `
+        <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; background: var(--bg-card, #f8fafc); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); color: var(--text-color, #334155);">
+          <input type="radio" name="genProjects" value="${p.id}" ${isSelected ? 'checked' : ''} style="width: auto; margin: 0;" />
+          ${escapeHtml(p.name)}
+        </label>
+      `;
+    });
+  }
+
+  container.innerHTML = html;
 }
 

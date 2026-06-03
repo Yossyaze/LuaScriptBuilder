@@ -22,7 +22,11 @@ export function txt(id, fallback) {
  * Luaの文字列リテラル用にエスケープする。
  */
 export function luaString(s) {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return String(s ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
 }
 
 /**

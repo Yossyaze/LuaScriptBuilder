@@ -9,11 +9,24 @@ export function modsToLua(mods) {
   return "{" + mods.map((m) => `\"${m}\"`).join(", ") + "}";
 }
 
-export function generateLua() {
+export function generateLua(targetProjectIds) {
   flushActiveProject();
 
   if (Object.keys(state.projects).length === 0) {
     throw new Error("プロジェクトがありません。");
+  }
+
+  let luaProjects = [];
+  if (targetProjectIds && Array.isArray(targetProjectIds)) {
+    luaProjects = targetProjectIds
+      .map(id => state.projects[id])
+      .filter(p => p && p.platform !== "js");
+  } else {
+    luaProjects = Object.values(state.projects).filter((p) => p.platform !== "js");
+  }
+
+  if (luaProjects.length === 0) {
+    throw new Error("生成対象のLua用プロジェクトがありません。");
   }
 
   if (!state.globalSettings.reloadHotkey || !state.globalSettings.reloadHotkey.key) {
@@ -276,6 +289,8 @@ local function createSequence(config)
       local modsStr = table.concat(s.mods or {}, ",")
       logStep(config.enableTimelineLog, cycleCount, "KEY_MOVE", string.format("key=%s mods=[%s] focus=%s", s.key, modsStr, frontAppName))
       hs.eventtap.keyStroke(s.mods or {}, s.key, 0)
+    elseif s.type == "device_switch" then
+      logStep(config.enableTimelineLog, cycleCount, "DEV_SWITCH_UNSUPPORTED", string.format("device=%s", s.deviceName or ""))
     elseif s.type == "click" then
       local app = hs.application.find(s.appName)
       if app then
@@ -409,7 +424,7 @@ end
 local allSequences = {};
 `;
 
-  Object.values(state.projects).forEach((p) => {
+  luaProjects.forEach((p) => {
     lua += `\n-- Project: ${p.name}\n`;
     lua += `local config_${p.id.replace(/-/g, "_")} = {\n`;
     lua += `  name = "${luaString(p.name)}",\n`;
@@ -511,6 +526,8 @@ local allSequences = {};
         lua += `      ngIndex = ${s.luaNgIndex || "nil"},\n`;
       } else if (s.kind === "jump") {
         lua += `      targetId = ${s.targetId || "nil"},\n`;
+      } else if (s.kind === "device_switch") {
+        lua += `      deviceName = "${luaString(s.deviceName)}",\n`;
       } else if (s.kind === "btt") {
         lua += `      triggerName = "${luaString(s.triggerName)}",\n`;
       } else if (s.kind === "shortcut") {

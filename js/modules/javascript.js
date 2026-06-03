@@ -27,19 +27,18 @@ function formatMods(mods) {
  * MultiKeyBoard の ScriptExecutor 環境で動作する JavaScript マクロスクリプトを生成する
  * @returns {string} 生成されたJavaScriptコード
  */
-export function generateJavascript() {
+export function generateJavascript(targetProjectId) {
   flushActiveProject();
 
   if (Object.keys(state.projects).length === 0) {
     throw new Error("プロジェクトがありません。");
   }
 
-  const activeProj = state.projects[state.activeProjectId];
-  if (!activeProj) {
-    throw new Error("アクティブなプロジェクトが見つかりません。");
+  const projId = targetProjectId || state.activeProjectId;
+  const p = state.projects[projId];
+  if (!p) {
+    throw new Error("指定されたプロジェクトが見つかりません。");
   }
-
-  const p = activeProj;
   let js = `// =============================================================================
 // MultiKeyBoard 用 自動生成スクリプト
 // プロジェクト: ${p.name}
@@ -93,6 +92,7 @@ while (true) {
     flatIndex: i + 1,
     displayNum: i + 1
   }));
+  const stepIdToDisplayNum = new Map(flatSteps.map((s) => [s.id, s.displayNum]));
 
   /**
    * 指定されたステップの「次」のステップのインデックスを特定する
@@ -128,6 +128,7 @@ while (true) {
   // JS 形式の switch-case 処理に変換して出力
   flatSteps.forEach((s) => {
     js += `      case ${s.displayNum}:\n`;
+    js += `      {\n`;
     
     let typeLabel = s.kind.toUpperCase();
     if (s.kind === "move") {
@@ -187,8 +188,9 @@ while (true) {
       js += `          nextStep = ${s.jsNgIndex || "null"};\n`;
       js += `        }\n`;
     } else if (s.kind === "jump") {
+      const targetIndex = stepIdToDisplayNum.get(s.targetId) || s.jsNextIndex || null;
       js += `        sys.sleep(${Math.round((s.waitAfter ?? 0.25) * 1000)});\n`;
-      js += `        nextStep = ${s.targetId || "null"};\n`;
+      js += `        nextStep = ${targetIndex || "null"};\n`;
     } else if (s.kind === "stop") {
       js += `        nextStep = null;\n`;
     } else if (s.kind === "btt") {
@@ -206,6 +208,7 @@ while (true) {
     }
     
     js += `        break;\n`;
+    js += `      }\n`;
   });
 
   js += `      default:\n`;
