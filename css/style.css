@@ -1346,19 +1346,14 @@
         color: #F7DF1E; /* JS標準カラー (ブランドイエロー) */
       }
 
-      /* プラットフォームバッジ単体のスタイル */
+      /* プラットフォームバッジのスタイル (枠線と背景を排除し、ロゴのみを表示) */
       #projectPlatformBadge {
-        background: var(--theme-accent-light) !important;
-        border: 1px solid var(--theme-accent) !important;
-        padding: 6px;
-        border-radius: 8px;
+        background: transparent !important;
+        border: none !important;
+        padding: 0;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
-        box-sizing: border-box;
-        box-shadow: 0 2px 8px var(--theme-accent-glow);
-        transition: all 0.3s ease;
+        box-shadow: none !important;
       }
 
