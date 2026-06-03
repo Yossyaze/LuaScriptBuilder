@@ -44,22 +44,22 @@
   --clr-device-switch-ink: #0369a1;
   --clr-device-switch-line: #bae6fd;
 
-  /* Default Theme Accent (Lua/Green fallback) */
-  --theme-accent: #10b981;
-  --theme-accent-glow: rgba(16, 185, 129, 0.15);
-  --theme-accent-light: #f0fdf4;
+  /* Default Theme Accent (Lua/Navy fallback) */
+  --theme-accent: #2c2d72;
+  --theme-accent-glow: rgba(44, 45, 114, 0.15);
+  --theme-accent-light: #f5f6ff;
 }
 
 body[data-platform="lua"] {
-  --theme-accent: #10b981;
-  --theme-accent-glow: rgba(16, 185, 129, 0.15);
-  --theme-accent-light: #f0fdf4;
+  --theme-accent: #2c2d72; /* Lua標準カラー (深い青紫) */
+  --theme-accent-glow: rgba(44, 45, 114, 0.15);
+  --theme-accent-light: #f5f6ff;
 }
 
 body[data-platform="js"] {
-  --theme-accent: #0284c7;
-  --theme-accent-glow: rgba(2, 132, 199, 0.15);
-  --theme-accent-light: #f0f9ff;
+  --theme-accent: #d97706; /* JS標準カラー (視認性を高めたアンバー/イエロー) */
+  --theme-accent-glow: rgba(217, 119, 6, 0.15);
+  --theme-accent-light: #fffbeb;
 }
 
 .flow {

@@ -26,19 +26,19 @@
       }
 
       body[data-platform="lua"] {
-        --theme-accent: #10b981;
-        --theme-accent-glow: rgba(16, 185, 129, 0.15);
-        --theme-accent-light: #f0fdf4;
-        --bg-grad-start: #e6f7f0; /* Lua時は薄いミントグリーン */
-        --bg-grad-mid: #f3faf7;
+        --theme-accent: #2c2d72; /* Lua標準カラー (深い青紫) */
+        --theme-accent-glow: rgba(44, 45, 114, 0.15);
+        --theme-accent-light: #f5f6ff; /* 薄い青紫背景 */
+        --bg-grad-start: #e8e9ff; /* Lua時は薄い青紫グラデーション */
+        --bg-grad-mid: #f4f5ff;
       }
 
       body[data-platform="js"] {
-        --theme-accent: #0284c7;
-        --theme-accent-glow: rgba(2, 132, 199, 0.15);
-        --theme-accent-light: #f0f9ff;
-        --bg-grad-start: #e0f2fe; /* JS時は薄いスカイブルー */
-        --bg-grad-mid: #f0f9ff;
+        --theme-accent: #d97706; /* JS標準カラー (視認性を高めたアンバー/イエロー) */
+        --theme-accent-glow: rgba(217, 119, 6, 0.15);
+        --theme-accent-light: #fffbeb; /* 薄いイエロー背景 */
+        --bg-grad-start: #fef3c7; /* JS時は薄いイエローグラデーション */
+        --bg-grad-mid: #fffbeb;
       }
 
       * {
@@ -1340,9 +1340,9 @@
         flex-shrink: 0;
       }
       .logo-icon.lua {
-        color: #002040; /* Luaメインネイビー */
+        color: #2C2D72; /* Lua標準カラー (深い青紫) */
       }
       .logo-icon.js {
-        color: #f7df1e; /* JSブランドイエロー */
+        color: #F7DF1E; /* JS標準カラー (ブランドイエロー) */
       }
 
