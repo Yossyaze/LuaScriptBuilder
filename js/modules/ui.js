@@ -180,6 +180,7 @@ function renderStepCard(step, stepNum, isLast = false) {
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
           <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
         </div>
         <div class="step-key-label-group" style="gap: 8px;">
@@ -222,6 +223,7 @@ function renderStepCard(step, stepNum, isLast = false) {
           </div>
         </div>
         <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+        <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
         <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
       </div>
     `;
@@ -256,6 +258,7 @@ function renderStepCard(step, stepNum, isLast = false) {
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
           <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
         </div>
       </div>
@@ -379,6 +382,7 @@ function renderStepCard(step, stepNum, isLast = false) {
             </div>
           </div>
           <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
           <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
         </div>
       </div>
@@ -908,7 +912,7 @@ export function updateAuthUI(user, syncStatus = state.sync.status) {
   }
 
   // クラウド同期状態に応じたアイコンと設定
-  const cloudOffSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.14a7 7 0 0 1 14.28 1.13c.27-.06.56-.09.85-.09a5 5 0 0 1 5 5c0 1.25-.46 2.4-1.21 3.29"/><path d="M16 16.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/><path d="M12 13V8"/><path d="M3 3l18 18"/><path d="M20 20a4.5 4.5 0 0 1-8 0"/></svg>`;
+  const cloudOffSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057" /><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78" /><path d="m2 2 20 20" /></svg>`;
   
   let cloudSvg = cloudOffSvg;
   let cloudClass = "cloud-off";
@@ -919,15 +923,15 @@ export function updateAuthUI(user, syncStatus = state.sync.status) {
     if (syncStatus === 'syncing') {
       cloudClass = "cloud-syncing";
       titleText = "同期中...";
-      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`; // ループ矢印
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`; // ループ矢印
     } else if (syncStatus === 'error') {
       cloudClass = "cloud-error";
       titleText = "同期エラー";
-      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 2.5-8.25A7 7 0 1 0 6.5 11.25A4.5 4.5 0 0 0 7.5 19Z"/><path d="m10.11 9.3 6.3 6.3m0-6.3-6.3 6.3"/></svg>`; // エラー雲
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /><path d="m15 9-6 6M9 9l6 6" /></svg>`; // エラー雲 (ノーマル雲 + 中心のバツ印)
     } else {
       cloudClass = "cloud-ok";
       titleText = "同期完了";
-      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 2.5-8.25A7 7 0 1 0 6.5 11.25A4.5 4.5 0 0 0 7.5 19Z"/><path d="m9 13 2 2 4-4"/></svg>`; // チェック雲
+      cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 15-5.5 5.5L9 18" /><path d="M5.516 16.07A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 3.501 7.327" /></svg>`; // チェック雲
     }
   }
 

@@ -1,0 +1,499 @@
+{
+  "activeProjectId": "proj_1780066089096",
+  "projects": {
+    "proj_1780066089096": {
+      "id": "proj_1780066089096",
+      "name": "サカモトコイン",
+      "platform": "lua",
+      "hotkeys": {
+        "start": { "key": "s", "mods": ["ctrl", "shift"] },
+        "stop": { "key": "x", "mods": ["ctrl", "shift"] }
+      },
+      "flowSteps": [
+        {
+          "id": 47,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "スーパーショートカット",
+          "waitAfter": 1.8,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 48,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "出撃",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 49,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPhoneへ切り替え",
+          "waitAfter": 0.6,
+          "moveHotkey": "iphoneMove"
+        },
+        {
+          "id": 50,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "マルチ検索",
+          "waitAfter": 1.8,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 51,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "マルチ選択",
+          "waitAfter": 1.3,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 52,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "出撃",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 53,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPadへ切り替え",
+          "waitAfter": 2.2,
+          "moveHotkey": "ipadMove"
+        },
+        {
+          "id": 54,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "スタート",
+          "waitAfter": 0.8,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 55,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "出発",
+          "waitAfter": 2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 183,
+          "kind": "check",
+          "phase": "Custom",
+          "title": "出発確認",
+          "waitAfter": 0.25,
+          "text": "(初回|参加者|受付中)",
+          "useRegex": true,
+          "bundleId": "com.apple.QuickTimePlayerX",
+          "appName": "QuickTime Player",
+          "okWaitBefore": 0.2,
+          "ngWaitBefore": 0.25,
+          "okBranch": [
+            {
+              "id": 185,
+              "kind": "jump",
+              "phase": "Custom",
+              "title": "ジャンプ",
+              "waitAfter": 0.2,
+              "targetId": 48
+            }
+          ],
+          "ngBranch": []
+        },
+        {
+          "id": 270,
+          "kind": "check",
+          "phase": "Custom",
+          "title": "日付チェック",
+          "waitAfter": 0.25,
+          "text": "(日付|お知らせ|ログイン)",
+          "useRegex": true,
+          "bundleId": "com.apple.QuickTimePlayerX",
+          "appName": "QuickTime Player",
+          "okWaitBefore": 0.25,
+          "ngWaitBefore": 15,
+          "okBranch": [
+            {
+              "id": 271,
+              "kind": "key",
+              "phase": "Custom",
+              "title": "キー送信",
+              "waitAfter": 0.25,
+              "key": "8",
+              "mods": [],
+              "appName": "KeyPad",
+              "settleBefore": 0.2
+            },
+            {
+              "id": 273,
+              "kind": "move",
+              "phase": "Custom",
+              "title": "iPhoneへ切り替え",
+              "waitAfter": 1,
+              "moveHotkey": "iphoneMove"
+            },
+            {
+              "id": 274,
+              "kind": "key",
+              "phase": "Custom",
+              "title": "キー送信",
+              "waitAfter": 0.25,
+              "key": "8",
+              "mods": [],
+              "appName": "KeyPad",
+              "settleBefore": 0.2
+            },
+            {
+              "id": 281,
+              "kind": "move",
+              "phase": "Custom",
+              "title": "iPadへ切り替え",
+              "waitAfter": 4,
+              "moveHotkey": "ipadMove"
+            },
+            {
+              "id": 278,
+              "kind": "check",
+              "phase": "Custom",
+              "title": "日付再確認",
+              "waitAfter": 0.25,
+              "text": "(日付|お知らせ|ログイン)",
+              "useRegex": true,
+              "bundleId": "QuickTime Player",
+              "appName": "QuickTime Player",
+              "okWaitBefore": 0.25,
+              "ngWaitBefore": 0.25,
+              "okBranch": [
+                {
+                  "id": 279,
+                  "kind": "jump",
+                  "phase": "Custom",
+                  "title": "ジャンプ",
+                  "waitAfter": 0.25,
+                  "targetId": 271
+                }
+              ],
+              "ngBranch": [
+                {
+                  "id": 280,
+                  "kind": "jump",
+                  "phase": "Custom",
+                  "title": "ジャンプ",
+                  "waitAfter": 0.25,
+                  "targetId": 47
+                }
+              ]
+            }
+          ],
+          "ngBranch": []
+        },
+        {
+          "id": 56,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "1手目",
+          "waitAfter": 0.2,
+          "key": "6",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 57,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPhoneへ切り替え",
+          "waitAfter": 12,
+          "moveHotkey": "iphoneMove"
+        },
+        {
+          "id": 60,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "2手目",
+          "waitAfter": 0.2,
+          "key": "6",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 63,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPadへ切り替え",
+          "waitAfter": 12,
+          "moveHotkey": "ipadMove"
+        },
+        {
+          "id": 66,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "3手目",
+          "waitAfter": 0.2,
+          "key": "6",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 285,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPhoneへ切り替え",
+          "waitAfter": 15,
+          "moveHotkey": "iphoneMove"
+        },
+        {
+          "id": 68,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "4手目",
+          "waitAfter": 0.25,
+          "key": "6",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 287,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPadへ切り替え",
+          "waitAfter": 15,
+          "moveHotkey": "ipadMove"
+        },
+        {
+          "id": 99,
+          "kind": "check",
+          "phase": "Custom",
+          "title": "クリアチェック",
+          "waitAfter": 0.25,
+          "text": "攻略のヒント",
+          "useRegex": false,
+          "bundleId": "com.apple.QuickTimePlayerX",
+          "appName": "QuickTime Player",
+          "okWaitBefore": 0.2,
+          "ngWaitBefore": 0.2,
+          "okBranch": [],
+          "ngBranch": [
+            {
+              "id": 250,
+              "kind": "jump",
+              "phase": "Custom",
+              "title": "ジャンプ",
+              "waitAfter": 0.2,
+              "targetId": 66
+            }
+          ]
+        },
+        {
+          "id": 78,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "クリア後OK",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 80,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPhoneへ切り替え",
+          "waitAfter": 1,
+          "moveHotkey": "iphoneMove"
+        },
+        {
+          "id": 81,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "クリア後OK",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 82,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPadへ切り替え",
+          "waitAfter": 3,
+          "moveHotkey": "ipadMove"
+        },
+        {
+          "id": 83,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト1",
+          "waitAfter": 1,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 84,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト2",
+          "waitAfter": 1,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 85,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト3",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 86,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "iPhoneへ切り替え",
+          "waitAfter": 1,
+          "moveHotkey": "iphoneMove"
+        },
+        {
+          "id": 87,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト1",
+          "waitAfter": 1,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 88,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト2",
+          "waitAfter": 1,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 89,
+          "kind": "key",
+          "phase": "Custom",
+          "title": "リザルト3",
+          "waitAfter": 0.2,
+          "key": "0",
+          "mods": [],
+          "appName": "KeyPad",
+          "settleBefore": 0.25
+        },
+        {
+          "id": 136,
+          "kind": "move",
+          "phase": "Custom",
+          "title": "切り替えショートカット送信",
+          "waitAfter": 0.2,
+          "moveHotkey": "ipadMove"
+        },
+        {
+          "id": 130,
+          "kind": "check",
+          "phase": "Custom",
+          "title": "ランクチェック",
+          "waitAfter": 0.25,
+          "text": "ランクアップ",
+          "useRegex": false,
+          "bundleId": "com.apple.QuickTimePlayerX",
+          "appName": "QuickTime Player",
+          "okWaitBefore": 4.8,
+          "ngWaitBefore": 2,
+          "okBranch": [
+            {
+              "id": 155,
+              "kind": "key",
+              "phase": "Custom",
+              "title": "キー送信",
+              "waitAfter": 5,
+              "key": "0",
+              "mods": [],
+              "appName": "KeyPad",
+              "settleBefore": 0.25
+            },
+            {
+              "id": 286,
+              "kind": "jump",
+              "phase": "Custom",
+              "title": "ジャンプ",
+              "waitAfter": 0.25,
+              "targetId": 130
+            }
+          ],
+          "ngBranch": []
+        }
+      ],
+      "config": {
+        "enableTimelineLog": "true",
+        "enableAutoStopLog": "true",
+        "enableExecutionAlert": "false",
+        "enableLoop": "true"
+      },
+      "stepIdSeq": 288,
+      "templateStepIds": {}
+    }
+  },
+  "globalSettings": {
+    "reloadHotkey": { "key": "r", "mods": ["ctrl", "shift"] },
+    "ipadMove": { "key": "a", "mods": ["ctrl", "shift"] },
+    "iphoneMove": { "key": "z", "mods": ["ctrl", "shift"] },
+    "stopAllHotkey": { "key": "q", "mods": ["ctrl", "shift"] },
+    "settleIPad": "1.00",
+    "settleIPhone": "1.00",
+    "waitKey": "0.25",
+    "settleBeforeKey": "0.20",
+    "waitClick": "0.25",
+    "waitFocus": "0.25",
+    "waitCheck": "0.25",
+    "waitBtt": "0.25",
+    "waitShortcut": "0.25"
+  },
+  "projectOrder": ["proj_1780066089096"]
+}

@@ -61,12 +61,12 @@
         margin: 0 auto;
         display: grid;
         gap: 24px;
-        grid-template-columns: 260px 1fr 380px; /* 左：プロジェクト、中：メイン、右：プレビュー */
+        grid-template-columns: min-content 1fr 380px; /* 左：プロジェクト、中：メイン、右：プレビュー */
         transition: grid-template-columns 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       }
       
       .wrap:has(.output-card.hidden) {
-        grid-template-columns: 260px 1fr; /* プレビュー非表示時は2ペイン */
+        grid-template-columns: min-content 1fr; /* プレビュー非表示時は2ペイン */
       }
 
       .main-columns {
@@ -565,6 +565,29 @@
         gap: 16px;
         background: var(--surface);
         padding: 16px;
+        width: 260px; /* 初期幅を明示的に指定 */
+        box-sizing: border-box;
+        transition: 
+          width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          padding 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          margin-right 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          border-width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      /* サイドバー収納時のスタイル */
+      .project-sidebar.collapsed {
+        width: 0;
+        padding: 0;
+        margin-right: -24px; /* Gridのgap分を打ち消して余白を詰める */
+        opacity: 0;
+        border: none;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .project-sidebar.collapsed::before {
+        display: none; /* 上部のグラデーション装飾線を非表示に */
       }
       
       .project-sidebar h2 {
@@ -573,6 +596,35 @@
         font-weight: 800;
         color: #1b3650;
         font-family: var(--font-heading);
+        white-space: nowrap; /* 折りたたみ時の縦書き化を防ぐ */
+      }
+
+      /* サイドバー開閉トグルボタン */
+      #btnToggleSidebar {
+        transition: all 0.2s ease;
+        position: relative;
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        padding: 0 !important; /* paddingをリセットしてSVGの横つぶれを防止 */
+      }
+
+      #btnToggleSidebar:hover {
+        background: var(--surface-soft);
+        color: var(--ink);
+        border-color: var(--theme-accent, var(--accent));
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      }
+
+      #btnToggleSidebar:active {
+        transform: translateY(0);
+      }
+
+      #btnToggleSidebar.active {
+        background: var(--theme-accent-light, #f0fdf4);
+        color: var(--theme-accent, var(--accent));
+        border-color: var(--theme-accent, var(--accent));
       }
 
       .sidebar-header {
@@ -1116,9 +1168,10 @@
       .auth-cloud-btn {
         background: transparent;
         border: 1px solid var(--line);
-        border-radius: 50%;
-        width: 38px;
-        height: 38px;
+        border-radius: 8px;
+        width: 46px;
+        height: 46px;
+        padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;

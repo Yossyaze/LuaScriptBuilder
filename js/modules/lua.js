@@ -2,6 +2,14 @@ import { state, flushActiveProject } from './state.js';
 import { hotkeys } from './constants.js';
 import { luaString } from './utils.js';
 
+function convertArrowKey(key) {
+  if (key === "←") return "left";
+  if (key === "→") return "right";
+  if (key === "↑") return "up";
+  if (key === "↓") return "down";
+  return key;
+}
+
 export function modsToLua(mods) {
   if (mods.length === 0) {
     return "{}";
@@ -34,9 +42,9 @@ export function generateLua(targetProjectIds) {
   }
 
   const reloadModsLua = modsToLua(state.globalSettings.reloadHotkey.mods);
-  const reloadKeyLua = luaString(state.globalSettings.reloadHotkey.key);
+  const reloadKeyLua = luaString(convertArrowKey(state.globalSettings.reloadHotkey.key));
   const stopAllModsLua = modsToLua(state.globalSettings.stopAllHotkey.mods);
-  const stopAllKeyLua = luaString(state.globalSettings.stopAllHotkey.key);
+  const stopAllKeyLua = luaString(convertArrowKey(state.globalSettings.stopAllHotkey.key));
 
   let lua = `-- ==========================================
 -- 共通ライブラリ・ファクトリ関数
@@ -499,10 +507,10 @@ local allSequences = {};
 
       if (s.kind === "move") {
         const hk = state.globalSettings[s.moveHotkey] || hotkeys[s.moveHotkey] || { key: "a", mods: ["ctrl", "shift"] };
-        lua += `      key = "${luaString(hk.key)}",\n`;
+        lua += `      key = "${luaString(convertArrowKey(hk.key))}",\n`;
         lua += `      mods = ${modsToLua(hk.mods)},\n`;
       } else if (s.kind === "key") {
-        lua += `      key = "${luaString(s.key)}",\n`;
+        lua += `      key = "${luaString(convertArrowKey(s.key))}",\n`;
         lua += `      mods = ${modsToLua(s.mods || [])},\n`;
         // アプリ前面化（フォーカス）用のフィールドを出力
         if (s.appName) {

@@ -18,7 +18,7 @@ import {
 } from './modules/ui.js';
 import { updateMermaidGraph } from './modules/flowchart.js';
 import { HistoryManager } from './modules/history.js';
-import { onAuthChange, loginWithGoogle, logout, loadUserData, subscribeUserData } from './modules/firebase.js';
+import { onAuthChange, loginWithGoogle, logout, loadUserData, subscribeUserData, saveUserData } from './modules/firebase.js';
 import { applyDataToState } from './modules/storage.js';
 import { updateAuthUI } from './modules/ui.js';
 
@@ -268,12 +268,6 @@ window.loadProjectState = function(projectId) {
  * 現在設定されているプロジェクト・言語のスクリプトを自動生成して出力エリアに反映する
  */
 window.autoGenerateScript = function() {
-  const card = document.getElementById("outputCard");
-  // 出力カードが非表示の場合は無駄な生成処理をスキップする
-  if (card && card.classList.contains("hidden")) {
-    return;
-  }
-
   try {
     const langRadio = document.querySelector('input[name="genLanguage"]:checked');
     if (!langRadio) return;
@@ -546,6 +540,34 @@ window.deleteProject = function(projectId) {
   }
 };
 
+window.duplicateProject = function(projectId) {
+  const sourceProj = state.projects[projectId];
+  if (!sourceProj) return;
+
+  saveHistory(); // 複製前の状態を履歴に保存
+
+  const id = "proj-" + Date.now();
+  // ディープコピー
+  const duplicated = JSON.parse(JSON.stringify(sourceProj));
+  duplicated.id = id;
+  duplicated.name = duplicated.name + " - コピー";
+
+  state.projects[id] = duplicated;
+
+  // 複製元のプロジェクトの直後に新しいプロジェクトを挿入
+  const index = state.projectOrder.indexOf(projectId);
+  if (index !== -1) {
+    state.projectOrder.splice(index + 1, 0, id);
+  } else {
+    state.projectOrder.push(id);
+  }
+
+  // 複製したプロジェクトをロードしてUIを更新し、ストレージに保存
+  window.loadProjectState(id);
+  saveToStorage();
+  setStatus(`プロジェクト「${sourceProj.name}」を複製しました`);
+};
+
 window.exportAllData = function() {
   flushActiveProject();
   const data = {
@@ -574,33 +596,52 @@ window.importAllData = function(event) {
   reader.onload = function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (!data.projects || !data.globalSettings) {
+      if (!data.projects) {
         throw new Error("無効なデータ形式です");
       }
 
-      if (!confirm("現在のすべてのデータが上書きされます。よろしいですか？")) {
+      if (!confirm("インポートしたプロジェクトを追加します。よろしいですか？")) {
         event.target.value = "";
         return;
       }
 
       saveHistory(); // インポート前を履歴に保存
       
-      // ステートの更新
-      state.projects = data.projects;
-      state.globalSettings = data.globalSettings;
-      state.activeProjectId = data.activeProjectId;
-      state.projectOrder = data.projectOrder || Object.keys(data.projects);
+      let firstImportedId = null;
+      
+      // プロジェクトの追加処理
+      const projectOrder = data.projectOrder || Object.keys(data.projects);
+      projectOrder.forEach((id, idx) => {
+        const project = data.projects[id];
+        if (!project) return;
+        
+        let targetId = id;
+        // IDが重複した場合は新IDを割り当てて別プロジェクトにする
+        if (state.projects[targetId]) {
+          targetId = "proj-" + (Date.now() + idx) + "-" + Math.floor(Math.random() * 1000);
+          project.id = targetId;
+          project.name = project.name + " (コピー)";
+        }
+        
+        state.projects[targetId] = project;
+        if (!state.projectOrder.includes(targetId)) {
+          state.projectOrder.push(targetId);
+        }
+        if (!firstImportedId) {
+          firstImportedId = targetId;
+        }
+      });
 
-      // 初期プロジェクトの読み込み
-      if (state.activeProjectId && state.projects[state.activeProjectId]) {
-        window.loadProjectState(state.activeProjectId);
+      // インポートした最初のプロジェクトをアクティブにする
+      if (firstImportedId && state.projects[firstImportedId]) {
+        window.loadProjectState(firstImportedId);
       } else {
         const firstId = state.projectOrder[0] || Object.keys(state.projects)[0];
         if (firstId) window.loadProjectState(firstId);
       }
 
       saveToStorage();
-      setStatus("データをインポートしました");
+      setStatus("プロジェクトを追加インポートしました");
     } catch (err) {
       console.error(err);
       alert("インポートに失敗しました: " + err.message);
@@ -881,7 +922,12 @@ function captureHotkey(e) {
   e.preventDefault();
   e.stopPropagation();
 
-  const key = e.key.toLowerCase();
+  let key = e.key.toLowerCase();
+  if (key === "arrowleft") key = "←";
+  else if (key === "arrowright") key = "→";
+  else if (key === "arrowup") key = "↑";
+  else if (key === "arrowdown") key = "↓";
+
   if (["control", "shift", "alt", "meta"].includes(key)) return;
 
   const mods = [];
@@ -934,6 +980,53 @@ window.syncGlobalSettingsToUI = function() {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  // サイドバーの開閉トグル処理
+  function toggleSidebar() {
+    const sidebar = document.getElementById("projectSidebar");
+    const toggleBtn = document.getElementById("btnToggleSidebar");
+    if (!sidebar) return;
+
+    const isCollapsed = sidebar.classList.toggle("collapsed");
+    localStorage.setItem("sidebar_collapsed", isCollapsed ? "true" : "false");
+
+    if (toggleBtn) {
+      if (isCollapsed) {
+        toggleBtn.classList.add("active");
+        toggleBtn.setAttribute("aria-expanded", "false");
+      } else {
+        toggleBtn.classList.remove("active");
+        toggleBtn.setAttribute("aria-expanded", "true");
+      }
+    }
+
+    // アニメーション完了後（300ms）にリサイズイベントを発火させ、レイアウトやMermaid図を再計算する
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      if (typeof updateMermaidGraph === "function") {
+        updateMermaidGraph();
+      }
+    }, 300);
+  }
+
+  // トグルボタンのクリックイベント登録
+  const btnToggleSidebar = document.getElementById("btnToggleSidebar");
+  if (btnToggleSidebar) {
+    btnToggleSidebar.onclick = toggleSidebar;
+  }
+
+  // 初期起動時に前回のサイドバー状態を復元
+  const isSidebarCollapsed = localStorage.getItem("sidebar_collapsed") === "true";
+  const sidebar = document.getElementById("projectSidebar");
+  if (sidebar && isSidebarCollapsed) {
+    sidebar.classList.add("collapsed");
+    if (btnToggleSidebar) {
+      btnToggleSidebar.classList.add("active");
+      btnToggleSidebar.setAttribute("aria-expanded", "false");
+    }
+  } else if (btnToggleSidebar) {
+    btnToggleSidebar.setAttribute("aria-expanded", "true");
+  }
+
   // アプリ起動時のグローバル設定同期
   syncGlobalSettingsToUI();
 
@@ -974,7 +1067,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (state.sync.isApplyingCloudData) return;
 
         if (!cloudData) {
-          console.log("No cloud data found for this user.");
+          console.log("No cloud data found for this user. Uploading local data as initial sync.");
+          // 初回ログイン時は現在のローカルデータをクラウドに自動アップロードする
+          const localJson = localStorage.getItem(NEW_STORAGE_KEY);
+          if (localJson) {
+            const localData = JSON.parse(localJson);
+            saveUserData(user.uid, localData);
+            state.sync.lastSyncedAt = localData.lastUpdatedAt || new Date().toISOString();
+            state.sync.status = 'synced';
+            updateAuthUI(state.user, state.sync.status);
+          } else {
+            saveToStorage();
+          }
           return;
         }
 
@@ -1012,6 +1116,10 @@ document.addEventListener("DOMContentLoaded", () => {
             applyCloud(true);
           } else {
             lastPromptedCloudTime = cloudTime;
+            // ユーザーがキャンセルした場合も、同期処理としては完了状態にする
+            state.sync.lastSyncedAt = cloudData.lastUpdatedAt || firestoreUpdatedAt || new Date().toISOString();
+            state.sync.status = 'synced';
+            updateAuthUI(state.user, state.sync.status);
           }
         } else if (cloudTime > localTime) {
           // C. リロードや他端末での更新（自動復元）：上書き（同期）
@@ -1022,9 +1130,19 @@ document.addEventListener("DOMContentLoaded", () => {
             applyCloud(false);
           } else {
             lastPromptedCloudTime = cloudTime;
+            // ユーザーがキャンセルした場合も、同期処理としては完了状態にする
+            state.sync.lastSyncedAt = cloudData.lastUpdatedAt || firestoreUpdatedAt || new Date().toISOString();
+            state.sync.status = 'synced';
+            updateAuthUI(state.user, state.sync.status);
           }
         } else {
           console.log("No significant cloud data or already handled. Skipping update.");
+          
+          // 自分がローカルで保存して同期が走った場合、または既に同期済みの場合は、
+          // 同期時刻を更新して画面上の表示を「同期完了」にする
+          state.sync.lastSyncedAt = cloudData.lastUpdatedAt || firestoreUpdatedAt || new Date().toISOString();
+          state.sync.status = 'synced';
+          updateAuthUI(state.user, state.sync.status);
         }
 
         function applyCloud(appendMode) {
@@ -1424,6 +1542,29 @@ document.addEventListener("DOMContentLoaded", () => {
       refreshFlowViews();
     } else if (t.dataset.action === "select-app") {
       document.getElementById(`file-app-${t.dataset.stepId}`).click();
+    } else if (t.dataset.action === "clear-app") {
+      e.preventDefault();
+      e.stopPropagation();
+      const stepId = Number(t.dataset.stepId);
+      const step = findStepById(stepId);
+      if (step) {
+        saveHistory();
+        step.appName = "";
+        step.bundleId = "";
+        
+        // DOMの即時更新
+        const input = document.querySelector(`input[data-field="appName"][data-step-id="${stepId}"]`);
+        if (input) input.value = "";
+        
+        const iconDisplay = document.getElementById(`app-icon-display-${stepId}`);
+        if (iconDisplay) {
+          iconDisplay.src = "";
+          iconDisplay.style.display = "none";
+        }
+        
+        setStatus("指定アプリをクリアしました");
+        refreshFlowViews();
+      }
     } else if (t.dataset.action === "toggle-presets") {
       const stepId = t.dataset.stepId;
       const menu = document.getElementById(`preset-menu-${stepId}`);
@@ -1656,6 +1797,11 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         window.undo();
       }
+    }
+    // Cmd+B / Ctrl+B でサイドバーの開閉をトグル
+    if (isMod && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      toggleSidebar();
     }
   });
 

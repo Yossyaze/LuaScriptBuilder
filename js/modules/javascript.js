@@ -39,14 +39,42 @@ export function generateJavascript(targetProjectId) {
   if (!p) {
     throw new Error("指定されたプロジェクトが見つかりません。");
   }
+
+  // 全ステップを平坦化（ネストされた分岐もスキャン対象とするため）
+  const getAllStepsFlatLocal = (steps) => {
+    let res = [];
+    steps.forEach((s) => {
+      res.push(s);
+      if (s.kind === "check") {
+        res = res.concat(getAllStepsFlatLocal(s.okBranch || []));
+        res = res.concat(getAllStepsFlatLocal(s.ngBranch || []));
+      }
+    });
+    return res;
+  };
+
+  const allSteps = getAllStepsFlatLocal(p.flowSteps);
+
+  // デバイス切り替えステップから、重複を除いたデバイス名一覧を抽出
+  const deviceNames = Array.from(new Set(
+    allSteps.filter(s => s.kind === "device_switch" && s.deviceName).map(s => s.deviceName)
+  ));
+
   let js = `// =============================================================================
 // MultiKeyBoard 用 自動生成スクリプト
 // プロジェクト: ${p.name}
 // 生成日時: ${new Date().toLocaleString()}
 // =============================================================================
 
-sys.log("【開始】プロジェクト: ${jsString(p.name)}");
+`;
 
+  if (deviceNames.length > 0) {
+    js += `// @devices ${deviceNames.join(", ")}\n\n`;
+  }
+
+  js += `sys.log("【開始】プロジェクト: ${jsString(p.name)}");`;
+
+  js += `
 const enableTimelineLog = ${p.config.enableTimelineLog || "true"};
 const enableLoop = ${p.config.enableLoop || "true"};
 
@@ -73,20 +101,6 @@ while (true) {
     switch (nextStep) {
 `;
 
-  // UI側の表示順序と完全に一致させるためのフラット化関数
-  const getAllStepsFlatLocal = (steps) => {
-    let res = [];
-    steps.forEach((s) => {
-      res.push(s);
-      if (s.kind === "check") {
-        res = res.concat(getAllStepsFlatLocal(s.okBranch || []));
-        res = res.concat(getAllStepsFlatLocal(s.ngBranch || []));
-      }
-    });
-    return res;
-  };
-
-  const allSteps = getAllStepsFlatLocal(p.flowSteps);
   const flatSteps = allSteps.map((s, i) => ({
     ...s,
     flatIndex: i + 1,
