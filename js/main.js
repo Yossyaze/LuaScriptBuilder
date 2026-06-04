@@ -7,20 +7,41 @@ import { saveToStorage, loadFromStorage } from './modules/storage.js';
 import { generateLua } from './modules/lua.js';
 import { generateJavascript } from './modules/javascript.js';
 import { 
-  updateFlowPreview, 
   renderHotkeys, 
   updateProjectTabs, 
   setStatus,
-  hotkeyToDisplay,
-  keyToDisplay,
   setupAddStepButtons,
   updateGenProjectList
 } from './modules/ui.js';
+import {
+  updateFlowPreview,
+  hotkeyToDisplay,
+  keyToDisplay
+} from './modules/stepRenderer.js';
 import { updateMermaidGraph } from './modules/flowchart.js';
 import { HistoryManager } from './modules/history.js';
 import { onAuthChange, loginWithGoogle, logout, loadUserData, subscribeUserData, saveUserData } from './modules/firebase.js';
 import { applyDataToState } from './modules/storage.js';
 import { updateAuthUI } from './modules/ui.js';
+import { exportAllData, importAllData } from './modules/io.js';
+import { handleAppSelect } from './modules/appParser.js';
+import {
+  createNewProject,
+  switchProjectPlatform,
+  renameProject,
+  deleteProject,
+  duplicateProject,
+  reorderProjects
+} from './modules/project.js';
+import {
+  addStep as addStepModule,
+  updateStepField as updateStepFieldModule,
+  reorderSteps,
+  moveToBranch,
+  moveToStart,
+  moveToEnd,
+  findStepArrayAndIndex
+} from './modules/flow.js';
 
 const history = new HistoryManager();
 let unsubscribeCloud = null;
@@ -324,55 +345,7 @@ window.refreshFlowViews = function() {
   }, 10);
 };
 
-window.handleAppSelect = async function(event, stepId) {
-  const files = event.target.files;
-  if (!files || files.length === 0) return;
-
-  setStatus("Info.plist を解析中...");
-  let infoPlistFile = null;
-  let shortestPathLength = Infinity;
-  for (let i = 0; i < files.length; i++) {
-    const path = files[i].webkitRelativePath;
-    if (path.endsWith("Contents/Info.plist")) {
-      const depth = path.split("/").length;
-      if (depth < shortestPathLength) {
-        shortestPathLength = depth;
-        infoPlistFile = files[i];
-      }
-    }
-  }
-
-  let appName = "";
-  let bundleId = "";
-  if (infoPlistFile) {
-    try {
-      const text = await infoPlistFile.text();
-      const getPlistValue = (xml, key) => {
-        const regex = new RegExp(`<key>${key}</key>\\s*<string>([^<]+)</string>`);
-        const match = xml.match(regex);
-        return match ? match[1] : null;
-      };
-      appName = getPlistValue(text, "CFBundleDisplayName") || getPlistValue(text, "CFBundleName");
-      bundleId = getPlistValue(text, "CFBundleIdentifier");
-    } catch (e) { console.error(e); }
-  }
-
-  if (!appName) {
-    const rootDir = files[0].webkitRelativePath.split("/")[0];
-    appName = rootDir.toLowerCase().endsWith(".app") ? rootDir.slice(0, -4) : rootDir;
-  }
-
-  const step = findStepById(stepId);
-  if (step) {
-    step.appName = appName || "";
-    step.bundleId = bundleId || "";
-    refreshFlowViews();
-    setStatus(`アプリ設定を更新しました: ${appName} (${bundleId || "ID取得不可"})`);
-  } else {
-    setStatus("ステップが見つかりませんでした");
-  }
-  event.target.value = "";
-};
+window.handleAppSelect = handleAppSelect;
 
 // ==========================================
 // プリセットUI描画処理
@@ -424,416 +397,61 @@ function renderPresetsList(stepId) {
 // --- Core Logic ---
 
 window.createNewProject = function(name, platform = "lua") {
-  const id = "proj-" + Date.now();
-  state.projects[id] = {
-    id,
-    name,
-    platform,
-    hotkeys: {
-      start: { key: "s", mods: ["ctrl", "shift"] },
-      stop: { key: "x", mods: ["ctrl", "shift"] },
-    },
-    flowSteps: [],
-    config: {
-      settleIPad: "0.3",
-      waitIPad: "2.0",
-      settleIPhone: "0.4",
-      waitIPhone: "1.5",
-      enableTimelineLog: "true",
-      enableAutoStopLog: "true",
-      enableLoop: "true",
-    },
-    stepIdSeq: 1,
-    templateStepIds: {},
-  };
-  state.projectOrder.push(id);
-  window.loadProjectState(id);
+  createNewProject(name, platform, { loadProjectState: window.loadProjectState });
 };
 
-function countStepsByKind(steps, kind) {
-  let count = 0;
-  (steps || []).forEach((step) => {
-    if (step.kind === kind) count += 1;
-    if (step.kind === "check") {
-      count += countStepsByKind(step.okBranch || [], kind);
-      count += countStepsByKind(step.ngBranch || [], kind);
-    }
-  });
-  return count;
-}
-
 window.switchProjectPlatform = function(nextPlatform, projectId = state.activeProjectId) {
-  const p = state.projects[projectId];
-  if (!p) return;
-
-  if (p.platform === nextPlatform) return;
-
-  flushActiveProject();
-  // Luaに切り替える時だけ、デバイス切替 (device_switch) が非サポートになる
-  const unsupportedCount = nextPlatform === "lua"
-    ? countStepsByKind(p.flowSteps, "device_switch")
-    : 0;
-
-  if (unsupportedCount > 0) {
-    const ok = confirm(
-      `デバイス切替ステップが${unsupportedCount}個あります。\n` +
-      `切り替えても削除はしませんが、Lua (Hammerspoon) では非サポートとなり警告表示されます。\n\n` +
-      "切り替えますか？"
-    );
-    if (!ok) {
-      // キャンセルされた場合、セレクトボックスの選択を元のプラットフォーム値に戻す
-      const select = document.getElementById("projectPlatformSelect");
-      if (select) select.value = p.platform;
-      return;
-    }
-  }
-
-  saveHistory();
-  p.platform = nextPlatform;
-  window.syncPlatformUI(nextPlatform);
-  updateProjectTabs();
-  refreshFlowViews();
-
-  const output = document.getElementById("output");
-  if (output) output.value = "";
-
-  saveToStorage();
-  setStatus(`${p.name} を ${nextPlatform === "js" ? "JS" : "Lua"} 用に切り替えました`);
+  switchProjectPlatform(nextPlatform, projectId, {
+    saveHistory,
+    syncPlatformUI: window.syncPlatformUI,
+    refreshFlowViews: window.refreshFlowViews
+  });
 };
 
 window.renameProject = function(projectId) {
-  const p = state.projects[projectId];
-  if (!p) return;
-  const name = prompt("名前を変更", p.name);
-  if (name) {
-    saveHistory();
-    p.name = name;
-    
-    if (projectId === state.activeProjectId) {
-      const activeNameDisp = document.getElementById("activeProjectNameDisplay");
-      if (activeNameDisp) {
-        activeNameDisp.textContent = name;
-      }
-    }
-    
-    updateProjectTabs();
-    saveToStorage();
-  }
+  renameProject(projectId, { saveHistory });
 };
 
 window.deleteProject = function(projectId) {
-  if (Object.keys(state.projects).length <= 1) {
-    alert("最後のプロジェクトは削除できません");
-    return;
-  }
-  const p = state.projects[projectId];
-  if (confirm(`プロジェクト「${p.name}」を削除しますか？`)) {
-    saveHistory();
-    delete state.projects[projectId];
-    state.projectOrder = state.projectOrder.filter(id => id !== projectId);
-    if (state.activeProjectId === projectId) {
-      window.loadProjectState(state.projectOrder[0]);
-    } else {
-      updateProjectTabs();
-    }
-    saveToStorage();
-  }
+  deleteProject(projectId, { saveHistory, loadProjectState: window.loadProjectState });
 };
 
 window.duplicateProject = function(projectId) {
-  const sourceProj = state.projects[projectId];
-  if (!sourceProj) return;
-
-  saveHistory(); // 複製前の状態を履歴に保存
-
-  const id = "proj-" + Date.now();
-  // ディープコピー
-  const duplicated = JSON.parse(JSON.stringify(sourceProj));
-  duplicated.id = id;
-  duplicated.name = duplicated.name + " - コピー";
-
-  state.projects[id] = duplicated;
-
-  // 複製元のプロジェクトの直後に新しいプロジェクトを挿入
-  const index = state.projectOrder.indexOf(projectId);
-  if (index !== -1) {
-    state.projectOrder.splice(index + 1, 0, id);
-  } else {
-    state.projectOrder.push(id);
-  }
-
-  // 複製したプロジェクトをロードしてUIを更新し、ストレージに保存
-  window.loadProjectState(id);
-  saveToStorage();
-  setStatus(`プロジェクト「${sourceProj.name}」を複製しました`);
+  duplicateProject(projectId, { saveHistory, loadProjectState: window.loadProjectState });
 };
 
-window.exportAllData = function() {
-  flushActiveProject();
-  const data = {
-    activeProjectId: state.activeProjectId,
-    projects: state.projects,
-    globalSettings: state.globalSettings,
-    projectOrder: state.projectOrder,
-  };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `luascriptbuilder-backup-${date}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus("データをエクスポートしました");
-};
+window.exportAllData = exportAllData;
 
 window.importAllData = function(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!data.projects) {
-        throw new Error("無効なデータ形式です");
-      }
-
-      if (!confirm("インポートしたプロジェクトを追加します。よろしいですか？")) {
-        event.target.value = "";
-        return;
-      }
-
-      saveHistory(); // インポート前を履歴に保存
-      
-      let firstImportedId = null;
-      
-      // プロジェクトの追加処理
-      const projectOrder = data.projectOrder || Object.keys(data.projects);
-      projectOrder.forEach((id, idx) => {
-        const project = data.projects[id];
-        if (!project) return;
-        
-        let targetId = id;
-        // IDが重複した場合は新IDを割り当てて別プロジェクトにする
-        if (state.projects[targetId]) {
-          targetId = "proj-" + (Date.now() + idx) + "-" + Math.floor(Math.random() * 1000);
-          project.id = targetId;
-          project.name = project.name + " (コピー)";
-        }
-        
-        state.projects[targetId] = project;
-        if (!state.projectOrder.includes(targetId)) {
-          state.projectOrder.push(targetId);
-        }
-        if (!firstImportedId) {
-          firstImportedId = targetId;
-        }
-      });
-
-      // インポートした最初のプロジェクトをアクティブにする
-      if (firstImportedId && state.projects[firstImportedId]) {
-        window.loadProjectState(firstImportedId);
-      } else {
-        const firstId = state.projectOrder[0] || Object.keys(state.projects)[0];
-        if (firstId) window.loadProjectState(firstId);
-      }
-
-      saveToStorage();
-      setStatus("プロジェクトを追加インポートしました");
-    } catch (err) {
-      console.error(err);
-      alert("インポートに失敗しました: " + err.message);
-    }
-    event.target.value = "";
-  };
-  reader.readAsText(file);
+  importAllData(event, { saveHistory, loadProjectState: window.loadProjectState });
 };
 
 window.reorderProjects = function(draggedId, targetId) {
-  const oldIndex = state.projectOrder.indexOf(draggedId);
-  const newIndex = state.projectOrder.indexOf(targetId);
-  if (oldIndex === -1 || newIndex === -1) return;
-  
-  saveHistory();
-  state.projectOrder.splice(oldIndex, 1);
-  state.projectOrder.splice(newIndex, 0, draggedId);
-  
-  updateProjectTabs();
-  saveToStorage();
+  reorderProjects(draggedId, targetId, { saveHistory });
 };
 
 function addStep(kind, moveHotkey = "ipadMove") {
-  saveHistory();
-  const step = normalizeStep({
-    id: nextStepId(),
-    kind,
-    moveHotkey,
-    waitAfter: (() => {
-      if (kind === "move") {
-        return Number(state.globalSettings[moveHotkey === "ipadMove" ? "settleIPad" : "settleIPhone"] || 1.0);
-      }
-      if (kind === "device_switch") return 1.0;
-      if (kind === "key") return Number(state.globalSettings.waitKey || 0.25);
-      if (kind === "click") return Number(state.globalSettings.waitClick || 0.25);
-      if (kind === "focus") return Number(state.globalSettings.waitFocus || 0.25);
-      if (kind === "check") return Number(state.globalSettings.waitCheck || 0.25);
-      if (kind === "btt") return Number(state.globalSettings.waitBtt || 0.25);
-      if (kind === "shortcut") return Number(state.globalSettings.waitShortcut || 0.25);
-      return 0.25;
-    })()
-  });
-
-  if (state.selectedBranch) {
-    const parent = findStepById(state.selectedBranch.checkId);
-    if (parent) {
-    if (state.selectedBranch.branchType === "ok") {
-        parent.okBranch = parent.okBranch || [];
-        if (state.selectedBranch.selectionType === 'header') {
-          parent.okBranch.unshift(step);
-        } else {
-          parent.okBranch.push(step);
-        }
-      } else {
-        parent.ngBranch = parent.ngBranch || [];
-        if (state.selectedBranch.selectionType === 'header') {
-          parent.ngBranch.unshift(step);
-        } else {
-          parent.ngBranch.push(step);
-        }
-      }
-    }
-  } else if (state.selectedMergeId) {
-    const loc = findStepArrayAndIndex(state.selectedMergeId, state.flowSteps);
-    if (loc) loc.array.splice(loc.index + 1, 0, step);
-    else state.flowSteps.push(step);
-  } else if (state.selectedStepId) {
-    const loc = findStepArrayAndIndex(state.selectedStepId, state.flowSteps);
-    if (loc) loc.array.splice(loc.index + 1, 0, step);
-    else state.flowSteps.push(step);
-  } else {
-    state.flowSteps.push(step);
-  }
-  state.selectedStepId = step.id;
-  state.selectedBranch = null;
-  state.selectedMergeId = null;
-  refreshFlowViews();
-}
-
-function findStepArrayAndIndex(stepId, steps) {
-  for (let i = 0; i < steps.length; i++) {
-    if (steps[i].id === stepId) return { array: steps, index: i };
-    if (steps[i].kind === "check") {
-      const ok = findStepArrayAndIndex(stepId, steps[i].okBranch || []);
-      if (ok) return ok;
-      const ng = findStepArrayAndIndex(stepId, steps[i].ngBranch || []);
-      if (ng) return ng;
-    }
-  }
-  return null;
+  addStepModule(kind, moveHotkey, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 }
 
 function updateStepField(stepId, field, value) {
-  saveHistory();
-  const step = findStepById(stepId);
-  if (!step) return;
-  if (["waitAfter", "x", "y", "settleBefore", "okWaitBefore", "ngWaitBefore"].includes(field)) {
-    step[field] = Number(value);
-  } else if (field === "targetId") {
-    step[field] = value ? Number(value) : null;
-  } else {
-    step[field] = value;
-  }
-  refreshFlowViews();
+  updateStepFieldModule(stepId, field, value, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 }
 
-let draggedStepId = null;
-
 window.reorderSteps = function(draggedId, targetId, position) {
-  if (draggedId === targetId) return;
-  
-  saveHistory();
-  const draggedLoc = findStepArrayAndIndex(draggedId, state.flowSteps);
-  if (!draggedLoc) return;
-  
-  const stepToMove = draggedLoc.array[draggedLoc.index];
-  draggedLoc.array.splice(draggedLoc.index, 1);
-  
-  const targetLoc = findStepArrayAndIndex(targetId, state.flowSteps);
-  if (targetLoc) {
-    let insertIndex = targetLoc.index;
-    if (position === 'after') insertIndex++;
-    targetLoc.array.splice(insertIndex, 0, stepToMove);
-  } else {
-    // 構造が変わって見つからない場合は末尾へ（安全策）
-    state.flowSteps.push(stepToMove);
-  }
-  refreshFlowViews();
+  reorderSteps(draggedId, targetId, position, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 };
 
 window.moveToBranch = function(draggedId, parentId, branchType) {
-  saveHistory();
-  const draggedLoc = findStepArrayAndIndex(draggedId, state.flowSteps);
-  if (!draggedLoc) return;
-  
-  const stepToMove = draggedLoc.array[draggedLoc.index];
-  const parentStep = findStepById(parentId);
-  if (!parentStep || parentStep.kind !== 'check') return;
-  
-  draggedLoc.array.splice(draggedLoc.index, 1);
-  
-  if (branchType === 'ok') {
-    parentStep.okBranch = parentStep.okBranch || [];
-    parentStep.okBranch.unshift(stepToMove);
-  } else {
-    parentStep.ngBranch = parentStep.ngBranch || [];
-    parentStep.ngBranch.unshift(stepToMove);
-  }
-  refreshFlowViews();
+  moveToBranch(draggedId, parentId, branchType, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 };
 
 window.moveToStart = function(draggedId) {
-  saveHistory();
-  const draggedLoc = findStepArrayAndIndex(draggedId, state.flowSteps);
-  if (!draggedLoc) return;
-  
-  const stepToMove = draggedLoc.array[draggedLoc.index];
-  draggedLoc.array.splice(draggedLoc.index, 1);
-  state.flowSteps.unshift(stepToMove);
-  refreshFlowViews();
+  moveToStart(draggedId, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 };
 
 window.moveToEnd = function(draggedId, parentId, branchType) {
-  saveHistory();
-  const draggedLoc = findStepArrayAndIndex(draggedId, state.flowSteps);
-  if (!draggedLoc) return;
-  
-  const stepToMove = draggedLoc.array[draggedLoc.index];
-  draggedLoc.array.splice(draggedLoc.index, 1);
-  
-  if (branchType === 'ok_ng_merge') {
-    const targetLoc = findStepArrayAndIndex(parentId, state.flowSteps);
-    if (targetLoc) {
-      targetLoc.array.splice(targetLoc.index + 1, 0, stepToMove);
-    } else {
-      state.flowSteps.push(stepToMove);
-    }
-  } else if (parentId && branchType) {
-    const parentStep = findStepById(parentId);
-    if (parentStep && parentStep.kind === 'check') {
-      if (branchType === 'ok') {
-        parentStep.okBranch = parentStep.okBranch || [];
-        parentStep.okBranch.push(stepToMove);
-      } else {
-        parentStep.ngBranch = parentStep.ngBranch || [];
-        parentStep.ngBranch.push(stepToMove);
-      }
-    }
-  } else {
-    state.flowSteps.push(stepToMove);
-  }
-  refreshFlowViews();
+  moveToEnd(draggedId, parentId, branchType, { saveHistory, refreshFlowViews: window.refreshFlowViews });
 };
 
 window.setupStepDragAndDrop = function() {

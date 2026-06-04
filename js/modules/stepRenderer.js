@@ -1,0 +1,695 @@
+import { state, normalizeStep, findStepById } from "./state.js";
+import { hotkeys, hotkeyLabels, hotkeyDisplayIds, APP_PRESETS } from "./constants.js";
+import { num, txt, escapeHtml } from "./utils.js";
+
+/**
+ * ホットキーオブジェクトを表示用の文字列に変換します。
+ * 
+ * @param {Object} hk ホットキーオブジェクト
+ * @returns {string} 表示用文字列
+ */
+export function hotkeyToDisplay(hk) {
+  if (!hk || !hk.key) return "未設定";
+  const m = (hk.mods || [])
+    .map((mod) => mod.charAt(0).toUpperCase() + mod.slice(1))
+    .join("+");
+  return (m ? m + "+" : "") + keyToDisplay(hk.key);
+}
+
+/**
+ * キー名を表示用に変換します。
+ * 
+ * @param {string} key キー名
+ * @returns {string} 変換後のキー名
+ */
+export function keyToDisplay(key) {
+  if (!key) return "未設定";
+  if (key === " " || key === "space") return "SPACE";
+  return key.toUpperCase();
+}
+
+/**
+ * ステップの種類に応じたデフォルト待機秒数を取得します。
+ * 
+ * @param {Object} step 対象ステップ
+ * @returns {number} 待機秒数
+ */
+export function defaultWaitSecondsForStep(step) {
+  if (!step) return 0.25;
+  const kind = step.kind;
+  if (kind === "check") return 0;
+  if (kind === "device_switch") return 1.0;
+  return 0.25;
+}
+
+let stepInfoMap = new Map();
+let globalStepOptionsHtml = "";
+
+/**
+ * ネストされたステップも含めて、すべてのステップをフラットな配列として取得します。
+ */
+export function getAllStepsFlat(steps) {
+  let res = [];
+  steps.forEach((s) => {
+    res.push(s);
+    if (s.kind === "check") {
+      res = res.concat(getAllStepsFlat(s.okBranch || []));
+      res = res.concat(getAllStepsFlat(s.ngBranch || []));
+    }
+  });
+  return res;
+}
+
+/**
+ * ブランク内の CHECK のネスト深度から必要なグリッドカラム数を計算します。
+ */
+function calcBranchWidth(steps) {
+  let maxWidth = 1;
+  for (const step of (steps || [])) {
+    if (step.kind === "check") {
+      const okW = calcBranchWidth(step.okBranch || []);
+      const ngW = calcBranchWidth(step.ngBranch || []);
+      maxWidth = Math.max(maxWidth, okW + ngW);
+    }
+  }
+  return maxWidth;
+}
+
+/**
+ * ジャンプ先セレクトボックス用のオプション HTML データを事前に作成します。
+ */
+function prepareStepMetadata() {
+  const flat = getAllStepsFlat(state.flowSteps);
+  stepInfoMap.clear();
+  const options = [];
+  flat.forEach((s, i) => {
+    const num = i + 1;
+    const label = `Step ${num}`;
+    stepInfoMap.set(s.id, { num, label, title: s.title || s.kind });
+    options.push(`<option value="${s.id}">Step ${num}: ${escapeHtml(s.title || s.kind)}</option>`);
+  });
+  globalStepOptionsHtml = options.join("");
+}
+
+/**
+ * ステップ ID から表示用のラベル (例: "Step 1") を取得します。
+ */
+export function getStepLabelById(id) {
+  const info = stepInfoMap.get(id);
+  return info ? info.label : "不明";
+}
+
+export const icons = {
+  ipad: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><line x1="12" x2="12" y1="18" y2="18"/></svg>`,
+  iphone: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="10" height="18" x="7" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="17" y2="17"/></svg>`,
+  device_switch: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17h16"/><path d="m16 20 4-4-4-4"/><path d="M20 7H4"/><path d="m8 3-4 4 4 4"/></svg>`,
+  key: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>`,
+  click: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
+  focus: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-3-3-3 3"/><path d="m15 18-3-3-3 3"/><path d="M12 3v6"/></svg>`,
+  check: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+  jump: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>`,
+  stop: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 9h6v6H9z"/></svg>`,
+  btt: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg>`,
+  shortcut: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
+  google: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.14-4.53z" fill="#EA4335"/></svg>`,
+  activity: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+};
+
+/**
+ * 単一のステップに対応する HTML カード文字列を生成します。
+ */
+export function renderStepCard(step, stepNum, isLast = false) {
+  let appIconSrc = "";
+  if (step.appName) {
+    const preset = APP_PRESETS.find(p => p.name === step.appName);
+    const bid = step.bundleId || (preset ? preset.id : "");
+    appIconSrc = bid ? `/api/app-icon?bundleId=${bid}` : "";
+  }
+
+  let icon = icons.key;
+  if (step.kind === "move") {
+    icon = step.moveHotkey === "ipadMove" ? icons.ipad : icons.iphone;
+  } else if (step.kind === "device_switch") {
+    icon = icons.device_switch;
+  } else if (step.kind === "click") {
+    icon = icons.click;
+  } else if (step.kind === "focus") {
+    icon = icons.focus;
+  } else if (step.kind === "check") {
+    icon = icons.check;
+  } else if (step.kind === "jump") {
+    icon = icons.jump;
+  } else if (step.kind === "stop") {
+    icon = icons.stop;
+  } else if (step.kind === "btt") {
+    icon = icons.btt;
+  } else if (step.kind === "shortcut") {
+    icon = icons.shortcut;
+  }
+
+  let displayContent = "";
+  let editorContent = "";
+
+  if (step.kind === "move") {
+    displayContent = `<p class="flow-value flow-value-hotkey">${hotkeyToDisplay(state.globalSettings[step.moveHotkey] || hotkeys[step.moveHotkey])}</p>`;
+    editorContent = `<span class="step-key-label" style="font-size:0.7rem; color:#94a3b8;">固定ステップ</span>`;
+  } else if (step.kind === "click") {
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div class="step-key-label-group">
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (クリック対象)" readonly />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
+          <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+        </div>
+        <div class="step-key-label-group" style="gap: 8px;">
+          <div style="display:flex; align-items:center; gap:3px;">
+            <span class="step-key-label">X</span>
+            <input type="number" class="step-input" style="width: 55px;" data-field="x" data-step-id="${step.id}" value="${step.x}" />
+          </div>
+          <div style="display:flex; align-items:center; gap:3px;">
+            <span class="step-key-label">Y</span>
+            <input type="number" class="step-input" style="width: 55px;" data-field="y" data-step-id="${step.id}" value="${step.y}" />
+          </div>
+          <div style="display:flex; align-items:center; gap:3px; margin-left:auto;">
+            <span class="step-key-label" title="前面に出るのを待つ時間">待機</span>
+            <input type="number" class="step-input" style="width: 48px;" data-field="settleBefore" data-step-id="${step.id}" value="${step.settleBefore}" step="0.1" min="0" />
+            <span class="step-key-label">s</span>
+          </div>
+        </div>
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "focus") {
+    displayContent = `
+      <div class="step-key-label-group">
+        <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+          <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+        </div>
+        <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (前面に出す)" readonly />
+        <div class="preset-dropdown-container">
+          <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+          <div class="preset-menu hidden" id="preset-menu-${step.id}">
+            <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+            <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+            <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+          </div>
+        </div>
+        <div class="preset-dropdown-container">
+          <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+          <div class="preset-menu hidden" id="running-menu-${step.id}">
+            <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
+          </div>
+        </div>
+        <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+        <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
+        <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "check") {
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="step-key-label-group" style="align-items: center; gap: 8px;">
+          <input type="text" class="step-input" style="flex:1;" data-field="text" data-step-id="${step.id}" value="${escapeHtml(step.text || "")}" placeholder="検知するテキストを入力..." />
+          <label style="display:flex; align-items:center; gap:4px; font-size:0.75rem; color:#64748b; cursor:pointer; white-space:nowrap;">
+            <input type="checkbox" data-field="useRegex" data-step-id="${step.id}" ${step.useRegex ? "checked" : ""} style="width:14px; height:14px; margin:0;" />
+            正規表現
+          </label>
+        </div>
+        <div class="step-key-label-group" style="align-items: center; gap: 8px;">
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名" readonly />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
+          <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+        </div>
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "jump") {
+    const optionsWithSelected = globalStepOptionsHtml.replace(
+      `value="${step.targetId}"`,
+      `value="${step.targetId}" selected`
+    );
+
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div class="step-key-label-group" style="flex-wrap: wrap;">
+          <span class="step-key-label" style="min-width: 60px;">移動先:</span>
+          <select class="step-input" data-field="targetId" data-step-id="${step.id}" style="width: auto;">
+            <option value="">-- ステップ選択 --</option>
+            ${optionsWithSelected}
+          </select>
+        </div>
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "stop") {
+    displayContent = `
+      <div class="step-key-label-group">
+        <span class="step-key-label">このステップで実行を停止します</span>
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "btt") {
+    displayContent = `
+      <div class="step-key-label-group">
+        <span class="step-key-label" style="min-width: 80px;">トリガー名:</span>
+        <input type="text" class="step-input" style="flex:1;" data-field="triggerName" data-step-id="${step.id}" value="${escapeHtml(step.triggerName || "")}" placeholder="BTTで設定した名前" />
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "shortcut") {
+    displayContent = `
+      <div class="step-key-label-group">
+        <span class="step-key-label" style="min-width: 90px;">ショートカット名:</span>
+        <input type="text" class="step-input" style="flex:1;" data-field="shortcutName" data-step-id="${step.id}" value="${escapeHtml(step.shortcutName || "")}" placeholder="ショートカットの名称" />
+      </div>
+    `;
+    editorContent = "";
+  } else if (step.kind === "device_switch") {
+    const devName = step.deviceName || "";
+    const isFav = window.isFavoriteDevice ? window.isFavoriteDevice(devName) : false;
+    const favList = window.getFavoriteDevices ? window.getFavoriteDevices() : [];
+    
+    let optionsHtml = '<option value="" selected>お気に入りから選ぶ...</option>';
+    favList.forEach(fav => {
+      optionsHtml += `<option value="${escapeHtml(fav)}">${escapeHtml(fav)}</option>`;
+    });
+
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="step-key-label-group" style="align-items: center; gap: 4px;">
+          <span class="step-key-label" style="min-width: 80px; flex-shrink: 0;">切替先名:</span>
+          <div style="display: flex; gap: 4px; flex: 1; align-items: center; min-width: 0;">
+            <input type="text" class="step-input" style="flex: 1; min-width: 0;" data-field="deviceName" data-step-id="${step.id}" value="${escapeHtml(devName)}" placeholder="デバイス名またはMACアドレス" autocomplete="off" autocorrect="off" spellcheck="false" />
+            <button type="button" class="btn-fav-toggle" data-action="toggle-favorite-device" data-step-id="${step.id}" style="border: none; background: none; cursor: pointer; font-size: 15px; padding: 2px 4px; color: ${isFav ? '#f5b041' : '#ccc'}; flex-shrink: 0;" title="${isFav ? 'お気に入りから削除' : 'お気に入りに追加'}">
+              ${isFav ? '★' : '☆'}
+            </button>
+          </div>
+        </div>
+        <div class="step-key-label-group" style="align-items: center; gap: 4px;">
+          <span class="step-key-label" style="min-width: 80px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary, #666);">お気に入り:</span>
+          <select class="step-input-preset" data-step-id="${step.id}" style="flex: 1; min-width: 0; padding: 2px 4px; border-radius: 4px; font-size: 11px; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #ccc); color: var(--text-color, #333);">
+            ${optionsHtml}
+          </select>
+        </div>
+      </div>
+    `;
+    editorContent = "";
+  } else {
+    displayContent = `
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div class="step-key-label-group" style="justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
+            <span class="step-key-label" style="min-width: 60px;">入力キー:</span>
+            <span class="step-key-badge" style="flex-shrink: 0;">${hotkeyToDisplay(step)}</span>
+            
+            ${step.appName ? `
+            <div style="display:flex; align-items:center; gap:2px; margin-left:6px; flex-shrink:0;">
+              <span class="step-key-label" title="前面に出るのを待つ時間">待機:</span>
+              <input type="number" class="step-input" style="width: 60px;" data-field="settleBefore" data-step-id="${step.id}" value="${step.settleBefore}" step="0.1" min="0" />
+              <span class="step-key-label">s</span>
+            </div>
+            ` : ''}
+          </div>
+          <button type="button" class="record-btn btn-small${state.recordingStepId === step.id ? " recording" : ""}" data-action="record-step" data-step-id="${step.id}" style="white-space: nowrap; flex-shrink: 0; margin-left: 8px;">
+            ${state.recordingStepId === step.id ? "入力待ち..." : "記録"}
+          </button>
+        </div>
+        <div class="step-key-label-group">
+          <div class="app-icon-container" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <img id="app-icon-display-${step.id}" src="${appIconSrc}" style="width: 100%; height: 100%; object-fit: contain; ${appIconSrc ? '' : 'display: none;'}" onerror="this.style.display='none';" />
+          </div>
+          <input type="text" class="step-input" style="flex:1; min-width: 0;" data-field="appName" data-step-id="${step.id}" value="${escapeHtml(step.appName || "")}" placeholder="アプリ名 (入力前にフォーカス・任意)" readonly />
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-presets" data-step-id="${step.id}" title="プリセットから選択">★</button>
+            <div class="preset-menu hidden" id="preset-menu-${step.id}">
+              <div class="preset-apps-list" id="preset-apps-list-${step.id}"></div>
+              <div class="preset-menu-divider" id="preset-menu-divider-${step.id}"></div>
+              <div class="preset-add-item" data-action="add-to-presets" data-step-id="${step.id}">＋ 現在のアプリを登録</div>
+            </div>
+          </div>
+          <div class="preset-dropdown-container">
+            <button type="button" class="btn-ghost btn-small preset-btn" data-action="toggle-running" data-step-id="${step.id}" style="color: #0ea5e9!important; border-color: #bae6fd!important; background: #f0f9ff!important; display: flex; align-items: center; justify-content: center; padding: 4px 6px!important;" title="起動中のアプリから選択">${icons.activity}</button>
+            <div class="preset-menu hidden" id="running-menu-${step.id}">
+              <div class="running-apps-list" id="running-apps-list-${step.id}"></div>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost btn-small" data-action="select-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important;">選択</button>
+          <button type="button" class="btn-ghost btn-small" data-action="clear-app" data-step-id="${step.id}" style="padding: 4px 8px!important; font-size: 0.7rem!important; color: #ef4444!important;" title="アプリ指定を解除">クリア</button>
+          <input type="file" id="file-app-${step.id}" webkitdirectory directory style="display:none;" />
+        </div>
+      </div>
+    `;
+    editorContent = "";
+  }
+
+  const badgeLabel =
+    step.kind === "move"
+      ? step.moveHotkey === "ipadMove"
+        ? "iPad"
+        : "iPhone"
+      : step.kind === "device_switch"
+        ? "DEV_SWITCH"
+      : step.kind === "click"
+        ? "CLICK"
+        : step.kind === "focus"
+          ? "FOCUS"
+          : step.kind === "check"
+            ? "CHECK"
+            : step.kind === "jump"
+              ? "JUMP"
+              : step.kind === "stop"
+                ? "STOP"
+                : step.kind === "btt"
+                  ? "BTT"
+                  : step.kind === "shortcut"
+                    ? "SHORTCUT"
+                    : "KEY";
+
+  const kindClass =
+    step.kind === "move"
+      ? step.moveHotkey === "ipadMove"
+        ? "move"
+        : "iphone"
+      : step.kind === "device_switch"
+        ? "device-switch"
+      : step.kind === "click"
+        ? "click"
+        : step.kind === "focus"
+          ? "focus"
+          : step.kind === "check"
+            ? "check"
+            : step.kind === "jump"
+              ? "jump"
+              : step.kind === "stop"
+                ? "stop"
+                : step.kind === "btt"
+                  ? "btt"
+                  : step.kind === "shortcut"
+                    ? "shortcut"
+                    : "key";
+
+  const activeProj = state.projects[state.activeProjectId];
+  const currentPlatform = activeProj ? activeProj.platform : "lua";
+  const isUnsupported =
+    (currentPlatform === "lua" && step.kind === "device_switch");
+
+  const unsupportedClass = isUnsupported ? " unsupported" : "";
+  const unsupportedWarning = isUnsupported
+    ? `<span class="unsupported-badge" title="このアクションは現在のターゲットプラットフォーム（${currentPlatform.toUpperCase()}）ではサポートされておらず、スクリプト生成時に無視または警告出力されます">⚠️ 非サポート</span>`
+    : "";
+
+  return `
+    <article class="flow-step ${kindClass}${state.selectedStepId === step.id ? " selected" : ""}${isLast ? " is-last" : ""}${unsupportedClass}" draggable="true" data-step-id="${step.id}">
+      <div class="flow-step-header">
+        <div class="flow-step-title">
+          <span class="flow-index">${stepNum}</span>
+          ${icon}
+          <span class="flow-kind flow-kind-${kindClass}">${badgeLabel}</span>
+          ${unsupportedWarning}
+          <input type="text" class="step-title-input" data-field="title" data-step-id="${step.id}" value="${escapeHtml(step.title || "")}" placeholder="アクション名" />
+        </div>
+        <button type="button" class="icon-btn" data-action="delete" data-step-id="${step.id}" title="削除">
+          <svg pointer-events="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="flow-step-body">
+        <div class="flow-value-container">
+          ${displayContent}
+        </div>
+        <div class="flow-edit-inline">
+          ${editorContent}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+/**
+ * フロー全体を再帰的に走査し、各ステップに対応する HTML コネクタ・分岐等の文字列を生成します。
+ */
+export function renderFlowStepsRecursive(
+  steps,
+  isTopLevel = false,
+  branchWaitInfo = null,
+  startIndex = 1,
+) {
+  const nodes = [];
+  let currentIdx = startIndex;
+
+  steps.forEach((raw, index) => {
+    const step = normalizeStep(raw);
+    const stepNum = currentIdx++;
+    const hasNext = index < steps.length - 1;
+
+    const okEndsStop =
+      step.kind === "check" &&
+      step.okBranch &&
+      step.okBranch.length > 0 &&
+      (step.okBranch[step.okBranch.length - 1].kind === "stop" ||
+        step.okBranch[step.okBranch.length - 1].kind === "jump");
+    const ngEndsStop =
+      step.kind === "check" &&
+      step.ngBranch &&
+      step.ngBranch.length > 0 &&
+      (step.ngBranch[step.ngBranch.length - 1].kind === "stop" ||
+        step.ngBranch[step.ngBranch.length - 1].kind === "jump");
+    const isStopStep =
+      step.kind === "stop" ||
+      step.kind === "jump" ||
+      (step.kind === "check" && okEndsStop && ngEndsStop);
+
+    const isLoopEnabled = document.getElementById("enableLoop")?.checked;
+    const isEffectivelyLast = !hasNext && (!isTopLevel || !isLoopEnabled);
+    const stepCardHtml = renderStepCard(step, stepNum, isEffectivelyLast);
+
+    if (step.kind !== "check") {
+      nodes.push(stepCardHtml);
+    }
+
+    if (step.kind === "jump") {
+      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
+      const targetDesc = getStepLabelById(step.targetId) || "未設定";
+      nodes.push(`
+        <div class="flow-jump-group">
+          <div class="flow-connector" data-insert-after="${step.id}">
+            <div class="flow-connector-pill">
+              <span class="flow-connector-dot"></span>
+              待機
+              <input data-field="waitAfter" data-step-id="${step.id}" type="number" min="0" step="0.05" value="${waitSeconds.toFixed(2)}" />
+              s
+            </div>
+          </div>
+          <div class="flow-jump-label">
+            <div class="flow-jump-pill">
+              ${icons.jump}
+              <span>${targetDesc} へジャンプ</span>
+            </div>
+          </div>
+        </div>
+      `);
+      return;
+    }
+
+    if (step.kind === "check") {
+      const { html: okHtml, nextIdx: nextIdxAfterOk } =
+        renderFlowStepsRecursive(
+          step.okBranch || [],
+          false,
+          null,
+          currentIdx,
+        );
+      currentIdx = nextIdxAfterOk;
+
+      const { html: ngHtml, nextIdx: nextIdxAfterNg } =
+        renderFlowStepsRecursive(
+          step.ngBranch || [],
+          false,
+          null,
+          currentIdx,
+        );
+      currentIdx = nextIdxAfterNg;
+
+      let mergeClass = "";
+      if (okEndsStop && ngEndsStop) mergeClass = " both-ends";
+      else if (okEndsStop) mergeClass = " ok-ends";
+      else if (ngEndsStop) mergeClass = " ng-ends";
+
+      const okBeforeConnector = `
+        <div class="flow-connector is-branch" data-branch-parent-id="${step.id}" data-branch-type="ok" data-is-start="true">
+          <div class="flow-connector-pill">
+            <span class="flow-connector-dot"></span>
+            待機
+            <input data-field="okWaitBefore" data-step-id="${step.id}" type="number" min="0" step="0.05" value="${(step.okWaitBefore ?? 0.5).toFixed(2)}" />
+            s
+          </div>
+        </div>
+      `;
+      const ngBeforeConnector = `
+        <div class="flow-connector is-branch" data-branch-parent-id="${step.id}" data-branch-type="ng" data-is-start="true">
+          <div class="flow-connector-pill">
+            <span class="flow-connector-dot"></span>
+            待機
+            <input data-field="ngWaitBefore" data-step-id="${step.id}" type="number" min="0" step="0.05" value="${(step.ngWaitBefore ?? 0.5).toFixed(2)}" />
+            s
+          </div>
+        </div>
+      `;
+
+      const okSelected =
+        state.selectedBranch &&
+        state.selectedBranch.checkId === step.id &&
+        state.selectedBranch.branchType === "ok";
+      const ngSelected =
+        state.selectedBranch &&
+        state.selectedBranch.checkId === step.id &&
+        state.selectedBranch.branchType === "ng";
+
+      const isMergeSelected = state.selectedMergeId === step.id;
+
+      const okWidth = calcBranchWidth(step.okBranch || []);
+      const ngWidth = calcBranchWidth(step.ngBranch || []);
+      const totalCols = okWidth + ngWidth;
+
+      nodes.push(`
+        <div class="flow-check-block${mergeClass}" style="--ok-cols: ${okWidth}; --total-cols: ${totalCols}">
+          <div class="flow-check-card">
+            ${stepCardHtml}
+          </div>
+          <div class="flow-split" style="--ok-cols: ${okWidth}; --total-cols: ${totalCols}" data-parent-check-id="${step.id}">
+            <div class="flow-split-col ok${okSelected ? " selected" : ""}${okEndsStop ? " ends-stop" : ""}" style="grid-column: 1 / ${okWidth + 1}" data-branch-type="ok" data-parent-id="${step.id}">
+              <div class="flow-split-header${okSelected && state.selectedBranch.selectionType === "header" ? " selected" : ""}" data-branch-type="ok" data-parent-id="${step.id}">✅ OK (見つかった時)</div>
+              ${okBeforeConnector}
+              ${okHtml || `<div class="flow-split-empty${okSelected && state.selectedBranch.selectionType === "empty" ? " selected" : ""}" data-branch-type="ok" data-parent-id="${step.id}">
+                <span class="flow-merge-indicator">↓</span>
+                <span class="empty-label">何もしないで合流</span>
+                <div class="empty-hint">クリックしてアクションを追加</div>
+              </div>`}
+              ${okEndsStop ? "" : `<div class="flow-branch-filler"></div>`}
+            </div>
+            <div class="flow-split-col ng${ngSelected ? " selected" : ""}${ngEndsStop ? " ends-stop" : ""}" style="grid-column: ${okWidth + 1} / ${totalCols + 1}" data-branch-type="ng" data-parent-id="${step.id}">
+              <div class="flow-split-header${ngSelected && state.selectedBranch.selectionType === "header" ? " selected" : ""}" data-branch-type="ng" data-parent-id="${step.id}">❌ NG (見つからない時)</div>
+              ${ngBeforeConnector}
+              ${ngHtml || `<div class="flow-split-empty${ngSelected && state.selectedBranch.selectionType === "empty" ? " selected" : ""}" data-branch-type="ng" data-parent-id="${step.id}">
+                <span class="flow-merge-indicator">↓</span>
+                <span class="empty-label">何もしないで合流</span>
+                <div class="empty-hint">クリックしてアクションを追加</div>
+              </div>`}
+              ${ngEndsStop ? "" : `<div class="flow-branch-filler"></div>`}
+            </div>
+          </div>
+          <div class="flow-merge${mergeClass}${isMergeSelected ? " selected" : ""}">
+            <span class="flow-merge-pill${isMergeSelected ? " selected" : ""}" data-rendered-from="merge" data-action="select-merge" data-parent-id="${step.id}" data-insert-at="end" data-branch-type="ok_ng_merge">↓ 合流</span>
+          </div>
+        </div>
+      `);
+    }
+
+    if (isStopStep) {
+      // コネクタなし
+    } else if (!hasNext) {
+      const isLoopEnabled = document.getElementById("enableLoop")?.checked;
+      if (isTopLevel && isLoopEnabled) {
+        if (step.kind !== "check") {
+          const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
+          nodes.push(`
+            <div class="flow-connector" data-insert-after="${step.id}">
+              <div class="flow-connector-pill">
+                <span class="flow-connector-dot"></span>
+                待機
+                <input data-field="waitAfter" data-step-id="${step.id}" type="number" min="0" step="0.05" value="${waitSeconds.toFixed(2)}" />
+                s
+              </div>
+            </div>
+          `);
+        }
+        
+        nodes.push(`
+          <div class="flow-loop-connector" data-insert-at="end" data-is-top="true">
+            <div class="flow-connector-pill" style="background: #f0f9ff; border-color: #bae6fd; color: #0369a1; padding: 6px 16px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              最初に戻ってループ
+            </div>
+          </div>
+        `);
+      } else if (isTopLevel && !isLoopEnabled) {
+        nodes.push(`
+          <div class="flow-connector"></div>
+          <div class="flow-end-connector" data-insert-at="end" data-is-top="true">
+            <div class="flow-connector-pill" style="background: #fef2f2; border-color: #fecaca; color: #991b1b; padding: 6px 16px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M9 9h6v6H9z"/></svg>
+              実行終了
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    if (!isStopStep && (hasNext || !isTopLevel) && step.kind !== "check") {
+      const waitSeconds = step.waitAfter ?? defaultWaitSecondsForStep(step);
+      nodes.push(`
+        <div class="flow-connector" data-insert-after="${step.id}">
+          <div class="flow-connector-pill">
+            <span class="flow-connector-dot"></span>
+            待機
+            <input data-field="waitAfter" data-step-id="${step.id}" type="number" min="0" step="0.05" value="${waitSeconds.toFixed(2)}" />
+            s
+          </div>
+        </div>
+      `);
+    }
+  });
+
+  return { html: nodes.join(""), nextIdx: currentIdx };
+}
+
+/**
+ * フロー全体のプレビュー表示（flowTrack 要素）を更新します。
+ */
+export function updateFlowPreview() {
+  const track = document.getElementById("flowTrack");
+  if (!track) return;
+  prepareStepMetadata();
+  const { html } = renderFlowStepsRecursive(state.flowSteps, true);
+  track.innerHTML = html;
+  
+  if (typeof window.setupStepDragAndDrop === "function") {
+    window.setupStepDragAndDrop();
+  }
+}
