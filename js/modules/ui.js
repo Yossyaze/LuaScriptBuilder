@@ -1,6 +1,6 @@
 import { state } from "./state.js";
 import { hotkeys, hotkeyDisplayIds } from "./constants.js";
-import { num, txt, escapeHtml } from "./utils.js";
+import { escapeHtml } from "./utils.js";
 import { isFirebaseConfigured } from "./firebase.js";
 import { hotkeyToDisplay, icons } from "./stepRenderer.js";
 

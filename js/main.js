@@ -1,5 +1,5 @@
-import { state, nextStepId, findStepById, flushActiveProject, normalizeStep, defaultTitleByKind } from './modules/state.js';
-import { hotkeyLabels, NEW_STORAGE_KEY } from './modules/constants.js';
+import { state, nextStepId, findStepById, flushActiveProject, normalizeStep } from './modules/state.js';
+import { NEW_STORAGE_KEY } from './modules/constants.js';
 import { getAllPresets, addCustomPreset, deleteCustomPreset } from './modules/presets.js';
 
 import { num, txt, escapeHtml } from './modules/utils.js';
