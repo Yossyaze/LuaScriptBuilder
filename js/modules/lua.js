@@ -2,51 +2,14 @@ import { state, flushActiveProject } from './state.js';
 import { hotkeys } from './constants.js';
 import { luaString } from './utils.js';
 
-function convertArrowKey(key) {
-  if (key === "←") return "left";
-  if (key === "→") return "right";
-  if (key === "↑") return "up";
-  if (key === "↓") return "down";
-  return key;
-}
+// ==========================================
+// テンプレート定数定義 (静的な Lua コード)
+// ==========================================
 
-export function modsToLua(mods) {
-  if (mods.length === 0) {
-    return "{}";
-  }
-  return "{" + mods.map((m) => `\"${m}\"`).join(", ") + "}";
-}
-
-export function generateLua(targetProjectIds) {
-  flushActiveProject();
-
-  if (Object.keys(state.projects).length === 0) {
-    throw new Error("プロジェクトがありません。");
-  }
-
-  let luaProjects = [];
-  if (targetProjectIds && Array.isArray(targetProjectIds)) {
-    luaProjects = targetProjectIds
-      .map(id => state.projects[id])
-      .filter(p => p && p.platform !== "js");
-  } else {
-    luaProjects = Object.values(state.projects).filter((p) => p.platform !== "js");
-  }
-
-  if (luaProjects.length === 0) {
-    throw new Error("生成対象のLua用プロジェクトがありません。");
-  }
-
-  if (!state.globalSettings.reloadHotkey || !state.globalSettings.reloadHotkey.key) {
-    throw new Error("再読込ホットキーが未設定です。");
-  }
-
-  const reloadModsLua = modsToLua(state.globalSettings.reloadHotkey.mods);
-  const reloadKeyLua = luaString(convertArrowKey(state.globalSettings.reloadHotkey.key));
-  const stopAllModsLua = modsToLua(state.globalSettings.stopAllHotkey.mods);
-  const stopAllKeyLua = luaString(convertArrowKey(state.globalSettings.stopAllHotkey.key));
-
-  let lua = `-- ==========================================
+/**
+ * Hammerspoon 側で実行される共通ライブラリおよびシーケンス制御用のコア Lua スクリプト。
+ */
+const LUA_CORE_LIBRARY = `-- ==========================================
 -- 共通ライブラリ・ファクトリ関数
 -- ==========================================
 local function nowTimestamp()
@@ -432,144 +395,10 @@ end
 local allSequences = {};
 `;
 
-  luaProjects.forEach((p) => {
-    lua += `\n-- Project: ${p.name}\n`;
-    lua += `local config_${p.id.replace(/-/g, "_")} = {\n`;
-    lua += `  name = "${luaString(p.name)}",\n`;
-    lua += `  enableTimelineLog = ${p.config.enableTimelineLog || "true"},\n`;
-    lua += `  enableAutoStopLog = ${p.config.enableAutoStopLog || "true"},\n`;
-    lua += `  enableExecutionAlert = ${p.config.enableExecutionAlert || "false"},\n`;
-    lua += `  enableLoop = ${p.config.enableLoop || "true"},\n`;
-    lua += `  steps = {\n`;
-    
-    // UI側の表示順序と完全に一致させるために、ui.js と同じロジックでフラット化
-    const getAllStepsFlatLocal = (steps) => {
-      let res = [];
-      steps.forEach((s) => {
-        res.push(s);
-        if (s.kind === "check") {
-          res = res.concat(getAllStepsFlatLocal(s.okBranch || []));
-          res = res.concat(getAllStepsFlatLocal(s.ngBranch || []));
-        }
-      });
-      return res;
-    };
-
-    const allSteps = getAllStepsFlatLocal(p.flowSteps);
-    const flatSteps = allSteps.map((s, i) => ({
-      ...s,
-      flatIndex: i + 1, // 1-based index for Lua
-      displayNum: i + 1
-    }));
-
-    /**
-     * 指定されたステップの「次」のステップのインデックスを特定する
-     */
-    const findNextIndex = (step, currentArray, parentAfterIndex) => {
-      const idx = currentArray.indexOf(step);
-      if (idx < currentArray.length - 1) {
-        // 次の兄弟ステップがある場合
-        return allSteps.indexOf(currentArray[idx + 1]) + 1;
-      }
-      // 兄弟がいない場合は親の「次」へ戻る
-      return parentAfterIndex;
-    };
-
-    /**
-     * 各ステップの okIndex, ngIndex, nextIndex を解決する
-     */
-    const resolveIndices = (steps, afterIndex) => {
-      steps.forEach((s) => {
-        const flatS = flatSteps[allSteps.indexOf(s)];
-        const nextIdx = findNextIndex(s, steps, afterIndex);
-        flatS.luaNextIndex = nextIdx;
-
-        if (s.kind === "check") {
-          flatS.luaOkIndex = resolveIndices(s.okBranch || [], nextIdx);
-          flatS.luaNgIndex = resolveIndices(s.ngBranch || [], nextIdx);
-        }
-      });
-      return steps.length > 0 ? (allSteps.indexOf(steps[0]) + 1) : afterIndex;
-    };
-
-    // インデックスの解決を実行
-    resolveIndices(p.flowSteps, null);
-
-    // Lua 形式に変換して出力
-    flatSteps.forEach((s) => {
-      lua += `    {\n`;
-      lua += `      displayNum = ${s.displayNum},\n`;
-      lua += `      id = ${s.id},\n`;
-      lua += `      type = "${s.kind}",\n`;
-      lua += `      label = "${luaString(s.title)}",\n`;
-      lua += `      waitAfter = ${s.waitAfter ?? 0.25},\n`;
-      lua += `      nextIndex = ${s.luaNextIndex || "nil"},\n`;
-
-      if (s.kind === "move") {
-        const hk = state.globalSettings[s.moveHotkey] || hotkeys[s.moveHotkey] || { key: "a", mods: ["ctrl", "shift"] };
-        lua += `      key = "${luaString(convertArrowKey(hk.key))}",\n`;
-        lua += `      mods = ${modsToLua(hk.mods)},\n`;
-      } else if (s.kind === "key") {
-        lua += `      key = "${luaString(convertArrowKey(s.key))}",\n`;
-        lua += `      mods = ${modsToLua(s.mods || [])},\n`;
-        // アプリ前面化（フォーカス）用のフィールドを出力
-        if (s.appName) {
-          lua += `      appName = "${luaString(s.appName)}",\n`;
-          lua += `      settleBefore = ${s.settleBefore ?? Number(state.globalSettings.settleBeforeKey || 0.2)},\n`;
-        }
-      } else if (s.kind === "click") {
-        lua += `      appName = "${luaString(s.appName)}",\n`;
-        lua += `      x = ${s.x},\n`;
-        lua += `      y = ${s.y},\n`;
-        lua += `      settleBefore = ${s.settleBefore},\n`;
-      } else if (s.kind === "focus") {
-        lua += `      appName = "${luaString(s.appName)}",\n`;
-      } else if (s.kind === "check") {
-        lua += `      text = "${luaString(s.text)}",\n`;
-        lua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
-        lua += `      bundleId = "${luaString(s.bundleId || s.appName || "")}",\n`;
-        lua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
-        lua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
-        lua += `      okIndex = ${s.luaOkIndex || "nil"},\n`;
-        lua += `      ngIndex = ${s.luaNgIndex || "nil"},\n`;
-      } else if (s.kind === "jump") {
-        lua += `      targetId = ${s.targetId || "nil"},\n`;
-      } else if (s.kind === "device_switch") {
-        lua += `      deviceName = "${luaString(s.deviceName)}",\n`;
-      } else if (s.kind === "btt") {
-        lua += `      triggerName = "${luaString(s.triggerName)}",\n`;
-      } else if (s.kind === "shortcut") {
-        lua += `      shortcutName = "${luaString(s.shortcutName)}",\n`;
-      }
-      lua += `    },\n`;
-    });
-
-    lua += `  }\n}\n`;
-    lua += `local seq_${p.id.replace(/-/g, "_")} = createSequence(config_${p.id.replace(/-/g, "_")})\n`;
-    lua += `table.insert(allSequences, seq_${p.id.replace(/-/g, "_")})\n`;
-
-    if (p.hotkeys.start.key && p.hotkeys.start.key !== "") {
-      const sMods = modsToLua(p.hotkeys.start.mods);
-      const sKey = luaString(p.hotkeys.start.key);
-      lua += `hs.hotkey.bind(${sMods}, "${sKey}", function() seq_${p.id.replace(/-/g, "_")}.start() end)\n`;
-    }
-    if (p.hotkeys.stop.key && p.hotkeys.stop.key !== "") {
-      const tMods = modsToLua(p.hotkeys.stop.mods);
-      const tKey = luaString(p.hotkeys.stop.key);
-      lua += `hs.hotkey.bind(${tMods}, "${tKey}", function() seq_${p.id.replace(/-/g, "_")}.stop("個別停止") end)\n`;
-    }
-  });
-
-  lua += `\n-- 全プロジェクト一括停止ホットキー\n`;
-  lua += `hs.hotkey.bind(${stopAllModsLua}, "${stopAllKeyLua}", function()\n`;
-  lua += `  -- 一括停止時はログを保存しないため、第2引数にfalseを指定する
-  for _, s in ipairs(allSequences) do s.stop("一括停止", false) end\n`;
-  lua += `end)\n`;
-
-  lua += `\n-- 設定再読込ホットキー\nhs.hotkey.bind(${reloadModsLua}, "${reloadKeyLua}", function()\n  hs.reload()\nend)\n`;
-  lua += `hs.alert.show("Hammerspoon LuaScriptBuilder Config Loaded", 2)\n`;
-
-  lua += `
+/**
+ * Hammerspoon 自動連携サーバー (CORS対応) を構築する Lua スクリプトテンプレート。
+ */
+const LUA_SERVER_TEMPLATE = `
 -- ==========================================
 -- LuaScriptBuilder 自動連携サーバー (CORS対応)
 -- ==========================================
@@ -638,6 +467,220 @@ lsbServer:setCallback(function(method, path, headers, body)
 end)
 lsbServer:start()
 `;
+
+// ==========================================
+// ヘルパー関数定義
+// ==========================================
+
+/**
+ * 矢印キーを表示用記号から Hammerspoon のキーイベント用の英語名に変換します。
+ */
+function convertArrowKey(key) {
+  if (key === "←") return "left";
+  if (key === "→") return "right";
+  if (key === "↑") return "up";
+  if (key === "↓") return "down";
+  return key;
+}
+
+/**
+ * 修飾キー配列を Lua のテーブル形式文字列（例: {"ctrl", "shift"}）に変換します。
+ */
+export function modsToLua(mods) {
+  if (mods.length === 0) {
+    return "{}";
+  }
+  return "{" + mods.map((m) => `\"${m}\"`).join(", ") + "}";
+}
+
+/**
+ * ネストされたステップも含めて、すべてのステップをフラットな配列にして返します。
+ */
+function getAllStepsFlatLocal(steps) {
+  let res = [];
+  steps.forEach((s) => {
+    res.push(s);
+    if (s.kind === "check") {
+      res = res.concat(getAllStepsFlatLocal(s.okBranch || []));
+      res = res.concat(getAllStepsFlatLocal(s.ngBranch || []));
+    }
+  });
+  return res;
+}
+
+/**
+ * 指定されたステップの「次」のステップのフラットなインデックス（1-based）を特定します。
+ */
+function findNextIndex(step, currentArray, parentAfterIndex, allSteps) {
+  const idx = currentArray.indexOf(step);
+  if (idx < currentArray.length - 1) {
+    // 次の兄弟ステップがある場合
+    return allSteps.indexOf(currentArray[idx + 1]) + 1;
+  }
+  // 兄弟がいない場合は親の「次」へ戻る
+  return parentAfterIndex;
+}
+
+/**
+ * 再帰的に各ステップの okIndex, ngIndex, nextIndex のフラットインデックスを解決してオブジェクトに付与します。
+ */
+function resolveIndices(steps, afterIndex, allSteps, flatSteps) {
+  steps.forEach((s) => {
+    const flatS = flatSteps[allSteps.indexOf(s)];
+    const nextIdx = findNextIndex(s, steps, afterIndex, allSteps);
+    flatS.luaNextIndex = nextIdx;
+
+    if (s.kind === "check") {
+      flatS.luaOkIndex = resolveIndices(s.okBranch || [], nextIdx, allSteps, flatSteps);
+      flatS.luaNgIndex = resolveIndices(s.ngBranch || [], nextIdx, allSteps, flatSteps);
+    }
+  });
+  return steps.length > 0 ? (allSteps.indexOf(steps[0]) + 1) : afterIndex;
+}
+
+/**
+ * 個別のステップを Lua テーブル形式のコード文字列に変換します。
+ */
+function serializeStepToLua(s) {
+  let lua = `    {\n`;
+  lua += `      displayNum = ${s.displayNum},\n`;
+  lua += `      id = ${s.id},\n`;
+  lua += `      type = "${s.kind}",\n`;
+  lua += `      label = "${luaString(s.title)}",\n`;
+  lua += `      waitAfter = ${s.waitAfter ?? 0.25},\n`;
+  lua += `      nextIndex = ${s.luaNextIndex || "nil"},\n`;
+
+  if (s.kind === "move") {
+    const hk = state.globalSettings[s.moveHotkey] || hotkeys[s.moveHotkey] || { key: "a", mods: ["ctrl", "shift"] };
+    lua += `      key = "${luaString(convertArrowKey(hk.key))}",\n`;
+    lua += `      mods = ${modsToLua(hk.mods)},\n`;
+  } else if (s.kind === "key") {
+    lua += `      key = "${luaString(convertArrowKey(s.key))}",\n`;
+    lua += `      mods = ${modsToLua(s.mods || [])},\n`;
+    if (s.appName) {
+      lua += `      appName = "${luaString(s.appName)}",\n`;
+      lua += `      settleBefore = ${s.settleBefore ?? Number(state.globalSettings.settleBeforeKey || 0.2)},\n`;
+    }
+  } else if (s.kind === "click") {
+    lua += `      appName = "${luaString(s.appName)}",\n`;
+    lua += `      x = ${s.x},\n`;
+    lua += `      y = ${s.y},\n`;
+    lua += `      settleBefore = ${s.settleBefore},\n`;
+  } else if (s.kind === "focus") {
+    lua += `      appName = "${luaString(s.appName)}",\n`;
+  } else if (s.kind === "check") {
+    lua += `      text = "${luaString(s.text)}",\n`;
+    lua += `      useRegex = ${s.useRegex ? "true" : "false"},\n`;
+    lua += `      bundleId = "${luaString(s.bundleId || s.appName || "")}",\n`;
+    lua += `      okWaitBefore = ${s.okWaitBefore ?? 0.5},\n`;
+    lua += `      ngWaitBefore = ${s.ngWaitBefore ?? 0.5},\n`;
+    lua += `      okIndex = ${s.luaOkIndex || "nil"},\n`;
+    lua += `      ngIndex = ${s.luaNgIndex || "nil"},\n`;
+  } else if (s.kind === "jump") {
+    lua += `      targetId = ${s.targetId || "nil"},\n`;
+  } else if (s.kind === "device_switch") {
+    lua += `      deviceName = "${luaString(s.deviceName)}",\n`;
+  } else if (s.kind === "btt") {
+    lua += `      triggerName = "${luaString(s.triggerName)}",\n`;
+  } else if (s.kind === "shortcut") {
+    lua += `      shortcutName = "${luaString(s.shortcutName)}",\n`;
+  }
+  lua += `    },\n`;
+  return lua;
+}
+
+// ==========================================
+// メインのスクリプト生成関数
+// ==========================================
+
+/**
+ * 指定されたプロジェクト一覧に対応する Hammerspoon 向け Lua 設定コード全体を生成します。
+ * 
+ * @param {Array<string>} targetProjectIds 生成対象プロジェクト ID 配列。指定がない場合は Lua プラットフォームの全プロジェクトを対象とします。
+ * @returns {string} 生成された Lua コード
+ */
+export function generateLua(targetProjectIds) {
+  flushActiveProject();
+
+  if (Object.keys(state.projects).length === 0) {
+    throw new Error("プロジェクトがありません。");
+  }
+
+  let luaProjects = [];
+  if (targetProjectIds && Array.isArray(targetProjectIds)) {
+    luaProjects = targetProjectIds
+      .map(id => state.projects[id])
+      .filter(p => p && p.platform !== "js");
+  } else {
+    luaProjects = Object.values(state.projects).filter((p) => p.platform !== "js");
+  }
+
+  if (luaProjects.length === 0) {
+    throw new Error("生成対象のLua用プロジェクトがありません。");
+  }
+
+  if (!state.globalSettings.reloadHotkey || !state.globalSettings.reloadHotkey.key) {
+    throw new Error("再読込ホットキーが未設定です。");
+  }
+
+  const reloadModsLua = modsToLua(state.globalSettings.reloadHotkey.mods);
+  const reloadKeyLua = luaString(convertArrowKey(state.globalSettings.reloadHotkey.key));
+  const stopAllModsLua = modsToLua(state.globalSettings.stopAllHotkey.mods);
+  const stopAllKeyLua = luaString(convertArrowKey(state.globalSettings.stopAllHotkey.key));
+
+  let lua = LUA_CORE_LIBRARY;
+
+  luaProjects.forEach((p) => {
+    lua += `\n-- Project: ${p.name}\n`;
+    lua += `local config_${p.id.replace(/-/g, "_")} = {\n`;
+    lua += `  name = "${luaString(p.name)}",\n`;
+    lua += `  enableTimelineLog = ${p.config.enableTimelineLog || "true"},\n`;
+    lua += `  enableAutoStopLog = ${p.config.enableAutoStopLog || "true"},\n`;
+    lua += `  enableExecutionAlert = ${p.config.enableExecutionAlert || "false"},\n`;
+    lua += `  enableLoop = ${p.config.enableLoop || "true"},\n`;
+    lua += `  steps = {\n`;
+
+    const allSteps = getAllStepsFlatLocal(p.flowSteps);
+    const flatSteps = allSteps.map((s, i) => ({
+      ...s,
+      flatIndex: i + 1,
+      displayNum: i + 1
+    }));
+
+    // インデックスの解決を実行
+    resolveIndices(p.flowSteps, null, allSteps, flatSteps);
+
+    // 各ステップをシリアライズして追加
+    flatSteps.forEach((s) => {
+      lua += serializeStepToLua(s);
+    });
+
+    lua += `  }\n}\n`;
+    lua += `local seq_${p.id.replace(/-/g, "_")} = createSequence(config_${p.id.replace(/-/g, "_")})\n`;
+    lua += `table.insert(allSequences, seq_${p.id.replace(/-/g, "_")})\n`;
+
+    if (p.hotkeys.start.key && p.hotkeys.start.key !== "") {
+      const sMods = modsToLua(p.hotkeys.start.mods);
+      const sKey = luaString(p.hotkeys.start.key);
+      lua += `hs.hotkey.bind(${sMods}, "${sKey}", function() seq_${p.id.replace(/-/g, "_")}.start() end)\n`;
+    }
+    if (p.hotkeys.stop.key && p.hotkeys.stop.key !== "") {
+      const tMods = modsToLua(p.hotkeys.stop.mods);
+      const tKey = luaString(p.hotkeys.stop.key);
+      lua += `hs.hotkey.bind(${tMods}, "${tKey}", function() seq_${p.id.replace(/-/g, "_")}.stop("個別停止") end)\n`;
+    }
+  });
+
+  lua += `\n-- 全プロジェクト一括停止ホットキー\n`;
+  lua += `hs.hotkey.bind(${stopAllModsLua}, "${stopAllKeyLua}", function()\n`;
+  lua += `  -- 一括停止時はログを保存しないため、第2引数にfalseを指定する
+  for _, s in ipairs(allSequences) do s.stop("一括停止", false) end\n`;
+  lua += `end)\n`;
+
+  lua += `\n-- 設定再読込ホットキー\nhs.hotkey.bind(${reloadModsLua}, "${reloadKeyLua}", function()\n  hs.reload()\nend)\n`;
+  lua += `hs.alert.show("Hammerspoon LuaScriptBuilder Config Loaded", 2)\n`;
+
+  lua += LUA_SERVER_TEMPLATE;
 
   return lua;
 }
